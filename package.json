@@ -7,7 +7,7 @@
     "train": "vite --port 3000 --open train-game/index.html",
     "train:dev": "vite --port 3000",
     "build": "vite build",
-    "dist": "node scripts/build.mjs",
+    "dist": "bash scripts/build.sh",
     "preview": "vite preview"
   },
   "keywords": [],
