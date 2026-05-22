@@ -1,0 +1,22 @@
+{
+  "name": "car_game",
+  "version": "1.0.0",
+  "description": "给小朋友玩的浏览器 3D 碰撞模拟游戏，基于 Three.js + Vite",
+  "type": "module",
+  "scripts": {
+    "train": "vite --port 3000 --open train-game/index.html",
+    "train:dev": "vite --port 3000",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cannon-es": "^0.20.0",
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  }
+}
