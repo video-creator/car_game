@@ -12,7 +12,7 @@ const SCHEMES = [
 // ── Create Locomotive ─────────────────────────
 function makeLoco(scheme) {
   const g = new THREE.Group();
-  const L = 2.8, W = 0.6;
+  const L = 2.8, W = 0.6, H = 0.85;
 
   const bodyMat = new THREE.MeshStandardMaterial({ color: scheme.body, roughness: 0.3, metalness: 0.4 });
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e2230, roughness: 0.8, metalness: 0.2 });
@@ -21,60 +21,55 @@ function makeLoco(scheme) {
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
   const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 2 });
 
-  // Chassis
-  const base = new THREE.Mesh(new THREE.BoxGeometry(L, 0.12, W + 0.08), darkMat);
-  base.position.y = 0.28;
-  g.add(base);
-
-  // Body
-  const body = new THREE.Mesh(new THREE.BoxGeometry(L - 0.2, 0.55, W), bodyMat);
-  body.position.y = 0.65;
+  // BODY: BoxGeometry(width=X, height=Y, depth=Z)
+  // Train length along Z axis (front at -Z)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, L), bodyMat);
+  body.position.y = 0.55;
   g.add(body);
 
-  // Nose
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.7, 10), bodyMat);
-  nose.rotation.x = Math.PI / 2;
-  nose.position.set(0, 0.62, -L / 2 - 0.15);
+  // Nose (cone at front -Z)
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.5, 10), bodyMat);
+  nose.rotation.x = -Math.PI / 2;
+  nose.position.set(0, 0.55, -L / 2 - 0.15);
   g.add(nose);
 
   // Roof
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(L - 0.32, 0.08, W - 0.04),
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(W - 0.04, 0.08, L - 0.32),
     new THREE.MeshStandardMaterial({ color: 0xd7dde6, roughness: 0.6 }));
-  roof.position.y = 0.95;
+  roof.position.set(0, H + 0.22, 0);
   g.add(roof);
 
-  // Stripes
+  // Side stripes
   for (const sz of [-1, 1]) {
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(L - 0.15, 0.06, 0.02), stripeMat);
-    stripe.position.set(0, 0.68, sz * (W / 2 + 0.01));
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, L - 0.15), stripeMat);
+    stripe.position.set(sz * (W / 2 + 0.01), 0.6, 0);
     g.add(stripe);
   }
 
-  // Headlight
+  // Headlight (at front -Z)
   const hl = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 4), lightMat);
-  hl.position.set(0, 0.52, -L / 2 - 0.35);
+  hl.position.set(0, 0.42, -L / 2 - 0.32);
   g.add(hl);
 
-  // Cab window
-  const win = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.15, 0.02), glassMat);
-  win.position.set(0, 0.78, -L / 2 - 0.45);
+  // Cab window (at front -Z)
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.02), glassMat);
+  win.position.set(0, 0.72, -L / 2 + 0.1);
   g.add(win);
 
-  // Bogies
+  // Rear light (at back +Z)
+  const rl = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xff3333, emissiveIntensity: 0.5 }));
+  rl.position.set(0, 0.42, L / 2 + 0.1);
+  g.add(rl);
+
+  // Bogies - wheel sets along Z (length) axis
   const wheelPairs = [];
-  for (const wx of [-L * 0.27, L * 0.27]) {
-    for (const wz of [-0.18, 0.18]) {
-      const wg = new THREE.Group();
+  for (const wz of [-L * 0.27, L * 0.27]) {
+    for (const wx of [-0.18, 0.18]) {
       const w = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 8), wheelMat);
       w.rotation.z = Math.PI / 2;
-      wg.add(w);
-      wg.position.set(0, 0.08, wx);
-      // Offset for each wheel pair
-      const actualW = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 8), wheelMat);
-      actualW.rotation.z = Math.PI / 2;
-      actualW.position.set(wz * 0.4, 0.08, wx);
-      g.add(actualW);
-      wheelPairs.push(actualW);
+      w.position.set(wx * 1.2, 0.08, wz);
+      g.add(w);
+      wheelPairs.push(w);
     }
   }
 
@@ -86,23 +81,31 @@ function makeLoco(scheme) {
 // ── Create Wagon ─────────────────────────────
 function makeWagon(color) {
   const g = new THREE.Group();
-  const L = 2.0, W = 0.54;
+  const L = 2.0, W = 0.54, H = 0.65;
 
   const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.3 });
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e2230, roughness: 0.8 });
 
-  const base = new THREE.Mesh(new THREE.BoxGeometry(L, 0.08, W + 0.04), darkMat);
-  base.position.y = 0.20;
-  g.add(base);
-
-  const body = new THREE.Mesh(new THREE.BoxGeometry(L - 0.1, 0.42, W), bodyMat);
-  body.position.y = 0.48;
+  // Body (length along Z)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, L), bodyMat);
+  body.position.y = 0.38;
   g.add(body);
 
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(L - 0.18, 0.06, W - 0.02),
+  // Roof
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(W - 0.02, 0.06, L - 0.18),
     new THREE.MeshStandardMaterial({ color: 0xd0d4d8, roughness: 0.6 }));
-  roof.position.y = 0.74;
+  roof.position.y = 0.75;
   g.add(roof);
+
+  // Wheels
+  for (const wz of [-0.7, 0.7]) {
+    for (const wx of [-0.15, 0.15]) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 8), darkMat);
+      w.rotation.z = Math.PI / 2;
+      w.position.set(wx * 1.2, 0.08, wz);
+      g.add(w);
+    }
+  }
 
   g._len = L;
   return g;
@@ -208,17 +211,17 @@ export function updateTrainOnTrack(train, ts) {
     c.mesh.position.copy(pos);
     c.mesh.position.y += 0.35;
 
-    // Align train's forward (-Z) to track tangent direction
+    // Align train's forward direction (-Z) to track tangent
     _quat.setFromUnitVectors(_fwd, tangent.clone().normalize());
     c.mesh.quaternion.copy(_quat);
 
     // Wheel rotation
     if (c.mesh._wheelPairs) {
       const wr = train.trackPos * 0.5;
-      for (const wp of c.mesh._wheelPairs) wp.rotation.x = wr;
+      for (const wp of c.mesh._wheelPairs) wp.rotation.z = wr;
     }
 
-    // Car world for couplers (front = -Z, back = +Z)
+    // Coupler connection points (front at -Z, back at +Z)
     const fwd = new THREE.Vector3(0, 0, -c.len * 0.5 + 0.02).applyQuaternion(c.mesh.quaternion).add(c.mesh.position);
     const bwd = new THREE.Vector3(0, 0, c.len * 0.5 - 0.02).applyQuaternion(c.mesh.quaternion).add(c.mesh.position);
     carWorld.push({ front: fwd, back: bwd });
