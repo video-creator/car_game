@@ -4,67 +4,98 @@ export function createEnvironment(scene, trackSystem) {
   const envGroup = new THREE.Group();
   scene.add(envGroup);
 
-  // ── Ground ──────────────────────────────────
-  const groundMat = new THREE.MeshStandardMaterial({ color: 0x4a8a42, roughness: 0.9 });
+  // ── Ground: rainbow gradients ──────────────
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x4466aa, roughness: 0.8, flatShading: true,
+  });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), groundMat);
   ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.3;
+  ground.position.y = -0.5;
   ground.receiveShadow = true;
   envGroup.add(ground);
 
-  // ── Hills ───────────────────────────────────
-  const hillMat = new THREE.MeshStandardMaterial({ color: 0x3a7a32, roughness: 0.9 });
-  for (let i = 0; i < 10; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 50 + Math.random() * 80;
-    const r = 12 + Math.random() * 20;
-    const h = 8 + Math.random() * 15;
-    const hill = new THREE.Mesh(
-      new THREE.SphereGeometry(r, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2),
-      hillMat
+  // ── Colored circles under the track ──────────
+  const ringColors = [0xff4488, 0xffaa00, 0x44ff88, 0x44aaff, 0xcc44ff];
+  const mainLen = trackSystem.mainLen;
+  for (let i = 0; i < 24; i++) {
+    const t = (i / 24) % 1;
+    const p = trackSystem.mainCurve.getPointAt(t);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.8, 1.8, 16),
+      new THREE.MeshBasicMaterial({ color: ringColors[i % ringColors.length], transparent: true, opacity: 0.15, side: THREE.DoubleSide })
     );
-    hill.position.set(Math.cos(angle) * dist, -r / 2 + h * 0.1, Math.sin(angle) * dist * 0.65);
-    hill.scale.y = (h / r) * 0.6;
-    envGroup.add(hill);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(p.x, -0.45, p.z);
+    envGroup.add(ring);
+
+    // Glow ring
+    const glow = new THREE.Mesh(
+      new THREE.RingGeometry(0.5, 0.8, 12),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.08 })
+    );
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.set(p.x, -0.44, p.z);
+    envGroup.add(glow);
   }
 
-  // ── Trees ───────────────────────────────────
-  const treeMat = new THREE.MeshStandardMaterial({ color: 0x2d7a2d, roughness: 0.9 });
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a3a20, roughness: 0.95 });
+  // ── Scattered candy huts ────────────────────
+  const hutColors = [0xff6688, 0xffaa44, 0x66ff88, 0x6688ff, 0xdd66ff, 0xffff66];
+  for (let i = 0; i < 15; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 30 + Math.random() * 70;
+    const color = hutColors[Math.floor(Math.random() * hutColors.length)];
+
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.2, 1.5, 1.5, 6),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.6 })
+    );
+    base.position.set(Math.cos(angle) * dist, 0.75, Math.sin(angle) * dist * 0.6);
+    base.castShadow = true;
+    envGroup.add(base);
+
+    const roof = new THREE.Mesh(
+      new THREE.ConeGeometry(1.6, 1.2, 6),
+      new THREE.MeshStandardMaterial({
+        color: 0xff4488, roughness: 0.5, emissive: 0xff2266, emissiveIntensity: 0.1,
+      })
+    );
+    roof.position.set(Math.cos(angle) * dist, 2.1, Math.sin(angle) * dist * 0.6);
+    roof.castShadow = true;
+    envGroup.add(roof);
+  }
+
+  // ── Glowing trees ───────────────────────────
+  const treeMat = new THREE.MeshStandardMaterial({ color: 0x44dd88, roughness: 0.6, emissive: 0x22bb66, emissiveIntensity: 0.2 });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x664422, roughness: 0.9 });
 
   const treePositions = [];
-  for (let i = 0; i < 80; i++) {
-    const t = (i / 80 + Math.random() * 0.01) % 1;
+  for (let i = 0; i < 60; i++) {
+    const t = (i / 60 + Math.random() * 0.01) % 1;
     const p = trackSystem.mainCurve.getPointAt(t);
     const tan = trackSystem.mainCurve.getTangentAt(t);
     const side = Math.random() > 0.5 ? 1 : -1;
     treePositions.push({
-      x: p.x - tan.z * side * (5 + Math.random() * 12),
-      z: p.z + tan.x * side * (5 + Math.random() * 12),
+      x: p.x - tan.z * side * (6 + Math.random() * 15),
+      z: p.z + tan.x * side * (6 + Math.random() * 15),
       y: p.y,
-      sc: 0.6 + Math.random() * 1.2,
-    });
-  }
-  // Distant trees
-  for (let i = 0; i < 120; i++) {
-    treePositions.push({
-      x: (Math.random() - 0.5) * 350, z: (Math.random() - 0.5) * 350,
-      y: 0, sc: 0.5 + Math.random() * 1.0,
+      sc: 0.8 + Math.random() * 1.5,
     });
   }
 
-  const trunkGeo = new THREE.CylinderGeometry(0.06, 0.10, 1.2, 4);
-  const folGeo = new THREE.ConeGeometry(0.7, 1.6, 6);
+  const trunkGeo = new THREE.CylinderGeometry(0.05, 0.08, 1.0, 4);
+  const folGeo = new THREE.SphereGeometry(0.6, 5, 4);
   const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, treePositions.length);
   const folInst = new THREE.InstancedMesh(folGeo, treeMat, treePositions.length);
-  const m4 = new THREE.Matrix4(), v = new THREE.Vector3(), q = new THREE.Quaternion();
+  const m4 = new THREE.Matrix4(), v = new THREE.Vector3();
 
   treePositions.forEach((tp, i) => {
+    const scale = tp.sc;
     v.set(tp.x, tp.y - 0.2, tp.z);
-    m4.compose(v, q, new THREE.Vector3(tp.sc, tp.sc, tp.sc));
+    m4.compose(v, new THREE.Quaternion(), new THREE.Vector3(1, scale * 1.2, 1));
     trunkInst.setMatrixAt(i, m4);
-    v.y = tp.y + 0.8 * tp.sc;
-    m4.compose(v, q, new THREE.Vector3(tp.sc, tp.sc, tp.sc));
+    v.y = tp.y + 0.5 * scale;
+    const colorShift = Math.sin(i * 1.5) * 0.15;
+    m4.compose(v, new THREE.Quaternion(), new THREE.Vector3(scale, scale, scale));
     folInst.setMatrixAt(i, m4);
   });
   trunkInst.count = treePositions.length;
@@ -76,89 +107,110 @@ export function createEnvironment(scene, trackSystem) {
   envGroup.add(trunkInst);
   envGroup.add(folInst);
 
-  // ── Stations ────────────────────────────────
-  const platforms = [
-    { t: 0.05, color: 0xcc8833 },
-    { t: 0.35, color: 0x3388cc },
-    { t: 0.65, color: 0x88cc33 },
-  ];
-
-  for (const st of platforms) {
-    const p = trackSystem.mainCurve.getPointAt(st.t);
-    const tan = trackSystem.mainCurve.getTangentAt(st.t);
-    const offX = -tan.z * 3.5, offZ = tan.x * 3.5;
-
-    // Platform
-    const plat = new THREE.Mesh(
-      new THREE.BoxGeometry(8, 0.15, 3),
-      new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 })
-    );
-    plat.position.set(p.x + offX, p.y + 0.15, p.z + offZ);
+  // ── Floating platforms with lights ──────────
+  const platMat = new THREE.MeshStandardMaterial({ color: 0x8855cc, emissive: 0x6622aa, emissiveIntensity: 0.2 });
+  for (let i = 0; i < 8; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 35 + Math.random() * 50;
+    const h = 5 + Math.random() * 15;
+    const plat = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 0.5, 6), platMat);
+    plat.position.set(Math.cos(angle) * dist * 0.8, h, Math.sin(angle) * dist * 0.6);
     plat.receiveShadow = true;
     envGroup.add(plat);
 
-    // Building
-    const bldg = new THREE.Mesh(
-      new THREE.BoxGeometry(2.5, 3, 2.5),
-      new THREE.MeshStandardMaterial({ color: st.color, roughness: 0.5 })
+    // Light beam
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.15, 2, 4),
+      new THREE.MeshBasicMaterial({ color: 0xcc88ff, transparent: true, opacity: 0.2 })
     );
-    bldg.position.set(p.x + offX - tan.x * 2, p.y + 1.5, p.z + offZ - tan.z * 2);
-    bldg.castShadow = true;
-    envGroup.add(bldg);
-  }
-
-  // ── Water ───────────────────────────────────
-  const waterMat = new THREE.MeshStandardMaterial({ color: 0x2288cc, roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.5 });
-  for (let i = 0; i < 4; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 40 + Math.random() * 50;
-    const water = new THREE.Mesh(new THREE.CircleGeometry(10 + Math.random() * 12, 16), waterMat);
-    water.rotation.x = -Math.PI / 2;
-    water.position.set(Math.cos(angle) * dist, -0.25, Math.sin(angle) * dist * 0.65);
-    envGroup.add(water);
+    beam.position.set(Math.cos(angle) * dist * 0.8, h - 1.5, Math.sin(angle) * dist * 0.6);
+    envGroup.add(beam);
   }
 
   // ── Stars (collectibles) ────────────────────
   const stars = [];
-  const starMat = new THREE.MeshStandardMaterial({ color: 0xffdd00, emissive: 0xffdd00, emissiveIntensity: 2 });
-  const starGeo = new THREE.OctahedronGeometry(0.35);
+  const starMat = new THREE.MeshStandardMaterial({ color: 0xffee00, emissive: 0xffee00, emissiveIntensity: 3 });
+  const starGeo = new THREE.OctahedronGeometry(0.4);
 
-  for (let i = 0; i < 25; i++) {
-    const t = (0.01 + i / 25) % 1;
+  for (let i = 0; i < 35; i++) {
+    const t = (0.01 + i / 35) % 1;
     const p = trackSystem.mainCurve.getPointAt(t);
     const tan = trackSystem.mainCurve.getTangentAt(t);
     const side = Math.random() > 0.5 ? 1 : -1;
+
     const star = new THREE.Mesh(starGeo, starMat.clone());
-    star.position.set(p.x - tan.z * side * 2.2, p.y + 1.5 + Math.random() * 0.5, p.z + tan.x * side * 2.2);
-    star.userData = { collected: false, baseY: star.position.y };
+    star.position.set(
+      p.x - tan.z * side * (2.0 + Math.random() * 0.8),
+      p.y + 2.0 + Math.random() * 2,
+      p.z + tan.x * side * (2.0 + Math.random() * 0.8)
+    );
+    star.userData = { collected: false, baseY: star.position.y, phase: Math.random() * Math.PI * 2 };
     stars.push(star);
     envGroup.add(star);
 
-    // Glow
+    // Glow ring around star
     const glow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.55, 6, 4),
-      new THREE.MeshBasicMaterial({ color: 0xffdd00, transparent: true, opacity: 0.25 })
+      new THREE.RingGeometry(0.5, 0.8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffee00, transparent: true, opacity: 0.2, side: THREE.DoubleSide })
     );
     glow.position.copy(star.position);
+    glow.rotation.x = -Math.PI / 2;
     glow.userData.parentStar = star;
     stars.push(glow);
     envGroup.add(glow);
   }
 
+  // ── Sky gradient via large sphere ───────────
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms: {
+      time: { value: 0 },
+    },
+    vertexShader: `
+      varying vec3 vPos;
+      void main() {
+        vPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vPos;
+      uniform float time;
+      void main() {
+        float h = normalize(vPos).y;
+        vec3 col1 = vec3(0.05, 0.05, 0.25);
+        vec3 col2 = vec3(0.3, 0.1, 0.5);
+        vec3 col3 = vec3(0.6, 0.3, 0.8);
+        vec3 col = mix(col1, col2, max(0.0, h) * 2.0);
+        col = mix(col, col3, max(0.0, h * 1.5 - 0.2));
+        // Stars
+        float star = pow(max(0.0, sin(vPos.x * 50.0 + vPos.y * 30.0 + vPos.z * 40.0 + time * 0.5)), 40.0);
+        col += vec3(star * 0.5);
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+  });
+  const skySphere = new THREE.Mesh(new THREE.SphereGeometry(800, 32, 24), skyMat);
+  envGroup.add(skySphere);
+
   // ── Update ──────────────────────────────────
   return {
     update(dt) {
       const t = Date.now() / 1000;
+
+      // Animate sky
+      skyMat.uniforms.time.value = t * 0.3;
+
+      // Animate stars
       for (let i = 0; i < stars.length; i += 2) {
         const s = stars[i];
         if (s.userData.collected) continue;
-        s.rotation.x = t * 1.5 + i;
-        s.rotation.y = t * 2 + i * 0.5;
-        s.position.y = s.userData.baseY + Math.sin(t * 2 + i) * 0.15;
-        // Glow follows
+        s.rotation.x = t * 2 + i * 0.7;
+        s.rotation.y = t * 2.5 + i;
+        s.position.y = s.userData.baseY + Math.sin(t * 3 + s.userData.phase) * 0.3;
         if (stars[i + 1]) {
           stars[i + 1].position.copy(s.position);
-          stars[i + 1].material.opacity = 0.2 + Math.sin(t * 3 + i) * 0.1;
+          stars[i + 1].material.opacity = 0.15 + Math.sin(t * 4 + i) * 0.08;
         }
       }
     },
@@ -167,7 +219,7 @@ export function createEnvironment(scene, trackSystem) {
       for (let i = 0; i < stars.length; i += 2) {
         const s = stars[i];
         if (s.userData.collected) continue;
-        if (playerPos.distanceTo(s.position) < 2.0) {
+        if (playerPos.distanceTo(s.position) < 2.5) {
           s.userData.collected = true;
           s.visible = false;
           if (stars[i + 1]) stars[i + 1].visible = false;

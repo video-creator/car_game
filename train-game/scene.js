@@ -2,8 +2,7 @@ import * as THREE from 'three';
 
 export function createScene() {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x6ab0de);
-  scene.fog = new THREE.FogExp2(0x8ab8d6, 0.002);
+  scene.background = new THREE.Color(0x0a0a2e);
 
   const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.3, 2000);
 
@@ -22,11 +21,22 @@ export function createScene() {
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  // Lights
-  const hemi = new THREE.HemisphereLight(0x87ceeb, 0x3a6e28, 0.7);
-  scene.add(hemi);
+  // Lights - cyberpunk style
+  const moon = new THREE.DirectionalLight(0x8866ff, 0.3);
+  moon.position.set(-100, 200, -50);
+  scene.add(moon);
 
-  const sun = new THREE.DirectionalLight(0xfff0d0, 1.2);
+  // Main colorful lights
+  const colors = [0xff4488, 0x44ff88, 0x4488ff];
+  for (let i = 0; i < 3; i++) {
+    const light = new THREE.DirectionalLight(colors[i], 0.4);
+    const angle = (i / 3) * Math.PI * 2;
+    light.position.set(Math.cos(angle) * 120, 80, Math.sin(angle) * 120);
+    scene.add(light);
+  }
+
+  // Sun light (warm)
+  const sun = new THREE.DirectionalLight(0xffd488, 0.8);
   sun.position.set(80, 150, 60);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -39,9 +49,9 @@ export function createScene() {
   sun.shadow.bias = -0.001;
   scene.add(sun);
 
-  const fill = new THREE.DirectionalLight(0xaad0ff, 0.3);
-  fill.position.set(-50, 80, -40);
-  scene.add(fill);
+  // Ambient
+  const hemi = new THREE.HemisphereLight(0x4488ff, 0x442266, 0.4);
+  scene.add(hemi);
 
   return { scene, camera, renderer };
 }

@@ -1,90 +1,130 @@
 import * as THREE from 'three';
 
 // ── Track System ─────────────────────────────────
+// 过山车风格: 大回环 / 螺旋 / 俯冲 / 波浪
 export function buildTrackSystem(scene) {
-  const R = 120;
+  // ── Main loop: exciting roller coaster ─────
+  const R = 100;
+  const pts = [];
 
-  // Create an irregular oval loop
-  const mainPoints = [];
-  const N = 30;
-  for (let i = 0; i < N; i++) {
-    const t = (i / N) * Math.PI * 2;
-    const r = R + Math.sin(t * 3) * 20 + Math.cos(t * 5) * 10 + Math.sin(t * 7) * 8;
-    const x = Math.cos(t) * r;
-    const z = Math.sin(t) * r * 0.65;
-    const y = Math.sin(t * 2) * 8 + Math.cos(t * 3) * 4;
-    mainPoints.push(new THREE.Vector3(x, y, z));
+  // 36 control points for a wild ride
+  for (let i = 0; i < 36; i++) {
+    const a = (i / 36) * Math.PI * 2;
+    // Radius varies wildly
+    const rr = R
+      + Math.sin(a * 2) * 30    // 2-lobe wide
+      + Math.cos(a * 3) * 25    // 3-lobe
+      + Math.sin(a * 5) * 15;   // 5-lobe detail
+    const x = Math.cos(a) * rr;
+    const z = Math.sin(a) * rr * 0.55;
+
+    // Wild height: big climbs + drops + loops
+    const loopPhase = i >= 10 && i <= 16; // loop section
+    const climbPhase = i >= 22 && i <= 28; // big climb
+    let y;
+    if (loopPhase) {
+      // Loop-de-loop: arc from low to high to low
+      const lp = (i - 10) / 6;  // 0..1
+      y = Math.sin(lp * Math.PI) * 35 + 15;
+    } else if (climbPhase) {
+      // Big climb/drop
+      const cp = (i - 22) / 6;
+      y = 8 + Math.sin(cp * Math.PI * 2) * 25;
+    } else {
+      y = Math.sin(a * 2) * 12 + Math.cos(a * 3) * 8 + Math.sin(a * 4) * 6;
+    }
+    pts.push(new THREE.Vector3(x, y, z));
   }
-  mainPoints.push(mainPoints[0].clone());
+  // Ensure closed loop
+  pts.push(pts[0].clone());
 
-  const mainCurve = new THREE.CatmullRomCurve3(mainPoints, true, 'catmullrom', 0.5);
+  const mainCurve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
   const mainLen = mainCurve.getLength();
 
   // ── Junction Branches ─────────────────────────
   const junctions = [];
 
-  // Junction 1: scenic mountain route
+  // Junction 1: Loop-de-loop extreme
   {
-    const bp1 = mainCurve.getPointAt(0.22);
-    const bp4 = mainCurve.getPointAt(0.38);
-    const midP1 = mainCurve.getPointAt(0.25);
-    const midP2 = mainCurve.getPointAt(0.42);
-    const bp2 = new THREE.Vector3(midP1.x + 50, midP1.y + 30, midP1.z - 20);
-    const bp3 = new THREE.Vector3(midP2.x + 40, midP2.y + 25, midP2.z - 30);
-    const bp1b = bp1.clone().lerp(bp2, 0.3);
-    const bp3b = bp4.clone().lerp(bp3, 0.3);
+    const bp1 = mainCurve.getPointAt(0.18);
+    const bp4 = mainCurve.getPointAt(0.34);
+    const m1 = mainCurve.getPointAt(0.20);
+    const m2 = mainCurve.getPointAt(0.32);
 
-    const branchCurve = new THREE.CatmullRomCurve3([bp1, bp1b, bp2, bp3, bp3b, bp4], false, 'catmullrom', 0.5);
+    const cp = [
+      bp1,
+      m1.clone().add(new THREE.Vector3(30, 20, -25)),
+      new THREE.Vector3(m1.x + 15, 50, m1.z - 40),
+      new THREE.Vector3(m1.x - 5, 25, m1.z - 45),
+      new THREE.Vector3(m2.x - 20, 40, m2.z - 30),
+      m2.clone().add(new THREE.Vector3(-25, 15, -15)),
+      bp4,
+    ];
+    const branchCurve = new THREE.CatmullRomCurve3(cp, false, 'catmullrom', 0.5);
     junctions.push({
-      name: '🌲 山林路线',
-      entryT: 0.22, entryDistance: 0.22 * mainLen,
-      exitT: 0.38, exitDistance: 0.38 * mainLen,
+      name: '🎢 大回环',
+      entryT: 0.18, entryDistance: 0.18 * mainLen,
+      exitT: 0.34, exitDistance: 0.34 * mainLen,
       branchCurve,
     });
   }
 
-  // Junction 2: low route (tunnel-like)
+  // Junction 2: Spiral corkscrew
   {
-    const bp1 = mainCurve.getPointAt(0.52);
-    const bp4 = mainCurve.getPointAt(0.70);
-    const mid1 = mainCurve.getPointAt(0.62);
-    const bp2 = new THREE.Vector3(mid1.x - 30, -6, mid1.z + 20);
-    const bp1b = bp1.clone().lerp(bp2, 0.4);
-    const bp3b = bp4.clone().lerp(bp2, 0.4);
+    const bp1 = mainCurve.getPointAt(0.48);
+    const bp4 = mainCurve.getPointAt(0.64);
+    const m1 = mainCurve.getPointAt(0.50);
 
-    const branchCurve = new THREE.CatmullRomCurve3([bp1, bp1b, bp2, bp3b, bp4], false, 'catmullrom', 0.5);
+    const cp = [bp1];
+    for (let i = 1; i <= 10; i++) {
+      const t = i / 10;
+      const angle = t * Math.PI * 3; // 1.5 turns
+      const r = 20 + t * 25;
+      cp.push(new THREE.Vector3(
+        m1.x + Math.cos(angle) * r,
+        m1.y + Math.sin(angle * 2) * 10 - t * 15,
+        m1.z + Math.sin(angle) * r
+      ));
+    }
+    cp.push(bp4);
+    const branchCurve = new THREE.CatmullRomCurve3(cp, false, 'catmullrom', 0.5);
     junctions.push({
-      name: '🚇 隧道低线',
-      entryT: 0.52, entryDistance: 0.52 * mainLen,
-      exitT: 0.70, exitDistance: 0.70 * mainLen,
+      name: '🌀 螺旋俯冲',
+      entryT: 0.48, entryDistance: 0.48 * mainLen,
+      exitT: 0.64, exitDistance: 0.64 * mainLen,
       branchCurve,
     });
   }
 
-  // Junction 3: high-speed straight
+  // Junction 3: Rainbow wave dash
   {
-    const bp1 = mainCurve.getPointAt(0.78);
-    const bp4 = mainCurve.getPointAt(0.92);
-    const mid = bp1.clone().lerp(bp4, 0.5);
-    mid.y += 5;
-    const branchCurve = new THREE.CatmullRomCurve3([
-      bp1, bp1.clone().add(new THREE.Vector3(20, 10, 10)),
-      mid, bp4.clone().add(new THREE.Vector3(-15, 8, -10)),
-      bp4
-    ], false, 'catmullrom', 0.5);
+    const bp1 = mainCurve.getPointAt(0.72);
+    const bp4 = mainCurve.getPointAt(0.88);
+    const m1 = mainCurve.getPointAt(0.74);
+    const m2 = mainCurve.getPointAt(0.86);
+
+    const cp = [bp1];
+    for (let i = 1; i <= 8; i++) {
+      const t = i / 8;
+      const side = Math.sin(t * Math.PI * 4) * 30;
+      cp.push(new THREE.Vector3(
+        m1.x + side + t * 40,
+        m1.y + Math.sin(t * Math.PI * 3) * 30 + 5,
+        m1.z + t * 30
+      ));
+    }
+    cp.push(bp4);
+    const branchCurve = new THREE.CatmullRomCurve3(cp, false, 'catmullrom', 0.5);
     junctions.push({
-      name: '⚡ 高速直道',
-      entryT: 0.78, entryDistance: 0.78 * mainLen,
-      exitT: 0.92, exitDistance: 0.92 * mainLen,
+      name: '🌈 彩虹波浪',
+      entryT: 0.72, entryDistance: 0.72 * mainLen,
+      exitT: 0.88, exitDistance: 0.88 * mainLen,
       branchCurve,
     });
   }
 
   const ts = {
-    mainCurve,
-    mainLen,
-    junctions,
-    // Get world position on main track by distance
+    mainCurve, mainLen, junctions,
     getPointOnMain(dist) {
       const t = ((dist % mainLen) + mainLen) % mainLen / mainLen;
       return {
@@ -95,21 +135,25 @@ export function buildTrackSystem(scene) {
   };
 
   // ── Visuals ──────────────────────────────────
-  buildTrackVisuals(scene, mainCurve);
-  for (const j of junctions) {
-    if (j.branchCurve) buildTrackVisuals(scene, j.branchCurve);
+  const colors = [0xff4444, 0xffaa00, 0x44ff44, 0x44aaff, 0xaa44ff];
+  buildTrackVisuals(scene, mainCurve, colors[0]);
+
+  for (let i = 0; i < junctions.length; i++) {
+    if (junctions[i].branchCurve) {
+      buildTrackVisuals(scene, junctions[i].branchCurve, colors[i + 1]);
+    }
   }
+
+  // Decorative arches
+  buildArches(scene, mainCurve);
 
   return ts;
 }
 
-// ── Visual rails ───────────────────────────────
-function buildTrackVisuals(scene, curve) {
-  const railMat = new THREE.MeshStandardMaterial({ color: 0x889098, metalness: 0.5, roughness: 0.4 });
-  const sleeperMat = new THREE.MeshStandardMaterial({ color: 0x5a4030, roughness: 0.9 });
-
+// ── Track Visuals ────────────────────────────────
+function buildTrackVisuals(scene, curve, color = 0xff4444) {
   const len = curve.getLength();
-  const samples = Math.floor(len / 2.5);
+  const samples = Math.floor(len / 1.2);
   const pts = [];
   const tangents = [];
 
@@ -119,99 +163,89 @@ function buildTrackVisuals(scene, curve) {
     tangents.push(curve.getTangentAt(t));
   }
 
-  // Rail geometry
-  const railGeo = new THREE.BufferGeometry();
-  const verts = [];
-  const idx = [];
-  const GAUGE = 0.7;
-  const hw = 0.04, rh = 0.12;
+  // Build main rail tube along the curve
+  const railPath = new THREE.CatmullRomCurve3(pts);
+  const tubeGeo = new THREE.TubeGeometry(railPath, Math.floor(samples / 1.5), 0.12, 6, false);
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.7, emissive: color, emissiveIntensity: 0.15 });
+  const mesh = new THREE.Mesh(tubeGeo, mat);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
 
-  for (let i = 0; i < pts.length; i++) {
-    const p = pts[i];
-    const tan = tangents[i];
-    const right = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-
-    for (const side of [-1, 1]) {
-      const off = right.clone().multiplyScalar(side * GAUGE);
-      verts.push(
-        p.x + off.x - right.x * hw, p.y, p.z + off.z - right.z * hw,
-        p.x + off.x + right.x * hw, p.y, p.z + off.z + right.z * hw,
-        p.x + off.x + right.x * hw, p.y + rh, p.z + off.z + right.z * hw,
-        p.x + off.x - right.x * hw, p.y + rh, p.z + off.z - right.z * hw,
-      );
-    }
-  }
-
-  const segs = pts.length - 1;
-  for (let i = 0; i < segs; i++) {
-    const b = i * 8;
-    const n = (i + 1) * 8;
-    for (const ro of [0, 4]) {
-      const bi = b + ro, ni = n + ro;
-      const f = [0, 1, 2, 0, 2, 3, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0, 0, 5, 1, 0, 4, 5, 4, 7, 6, 4, 6, 5];
-      for (const fi of f) idx.push([bi, ni][fi < 6 ? 0 : 1] + (fi < 6 ? fi : fi - 6));
-    }
-  }
-
-  // Simpler rail geometry using TubeGeometry or line segments
-  // Let's use a simple approach: box rails
-  scene.add(buildSimpleRails(curve, railMat));
-
-  // Sleepers
-  buildSleepers(scene, curve, sleeperMat);
-}
-
-function buildSimpleRails(curve, mat) {
-  const group = new THREE.Group();
-  const len = curve.getLength();
-  const samples = Math.floor(len / 1.5);
-  const GAUGE = 0.7;
-
-  // Use extruded rectangles along the curve for each rail
+  // Side rails (two thin tubes)
+  const railMat = new THREE.MeshStandardMaterial({ color: 0xc0d0e0, metalness: 0.8, roughness: 0.2 });
   for (const side of [-1, 1]) {
-    const pts3 = [];
-    for (let i = 0; i <= samples; i++) {
-      const t = i / samples;
-      const p = curve.getPointAt(t);
-      const tan = curve.getTangentAt(t);
+    const sidePts = [];
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const tan = tangents[i];
       const right = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-      const off = right.clone().multiplyScalar(side * GAUGE);
-      pts3.push(new THREE.Vector3(p.x + off.x, p.y + 0.06, p.z + off.z));
+      const off = right.clone().multiplyScalar(side * 0.35);
+      sidePts.push(new THREE.Vector3(p.x + off.x, p.y + 0.08, p.z + off.z));
     }
-
-    const path = new THREE.CatmullRomCurve3(pts3);
-    const tubeGeo = new THREE.TubeGeometry(path, Math.floor(samples / 2), 0.05, 4, false);
-    const mesh = new THREE.Mesh(tubeGeo, mat);
-    mesh.receiveShadow = true;
-    mesh.castShadow = true;
-    group.add(mesh);
+    const sidePath = new THREE.CatmullRomCurve3(sidePts);
+    const sideTube = new THREE.TubeGeometry(sidePath, Math.floor(samples / 2), 0.04, 4, false);
+    const sideMesh = new THREE.Mesh(sideTube, railMat);
+    scene.add(sideMesh);
   }
 
-  return group;
-}
-
-function buildSleepers(scene, curve, mat) {
-  const len = curve.getLength();
-  const count = Math.floor(len / 3.5);
-  const sleeperGeo = new THREE.BoxGeometry(2.0, 0.10, 0.18);
-  const inst = new THREE.InstancedMesh(sleeperGeo, mat, count);
+  // Sleepers (彩色卡哇伊枕木)
+  const sleeperMat = new THREE.MeshStandardMaterial({ color: 0xffcc88, roughness: 0.7 });
+  const sleeperGeo = new THREE.BoxGeometry(0.9, 0.06, 0.08);
+  const count = Math.floor(len / 3.0);
+  const inst = new THREE.InstancedMesh(sleeperGeo, sleeperMat, count);
   inst.castShadow = true;
-  inst.receiveShadow = true;
-  inst.count = count;
   const m4 = new THREE.Matrix4();
   const pos = new THREE.Vector3();
   const quat = new THREE.Quaternion();
+  const _up = new THREE.Vector3(0, 1, 0);
+  const _right = new THREE.Vector3();
 
   for (let i = 0; i < count; i++) {
-    const t = (i * 3.5) / len;
+    const t = (i * 3.0) / len;
     const p = curve.getPointAt(Math.min(1, t));
     const tan = curve.getTangentAt(Math.min(1, t));
+    _right.set(-tan.z, 0, tan.x).normalize();
     pos.copy(p);
-    pos.y += 0.05;
-    quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(-tan.z, 0, tan.x).normalize());
+    pos.y += 0.0;
+    quat.setFromUnitVectors(_up, _right);
     m4.compose(pos, quat, new THREE.Vector3(1, 1, 1));
     inst.setMatrixAt(i, m4);
   }
   inst.instanceMatrix.needsUpdate = true;
   scene.add(inst);
+}
+
+// ── Decorative arches ────────────────────────────
+function buildArches(scene, curve) {
+  const len = curve.getLength();
+  const archCount = Math.floor(len / 40);
+  const archMat = new THREE.MeshStandardMaterial({
+    color: 0xff88cc, roughness: 0.3, metalness: 0.5, transparent: true, opacity: 0.4,
+  });
+
+  for (let i = 0; i < archCount; i++) {
+    const t = (i * 40 + 15) / len;
+    if (t > 1) break;
+    const p = curve.getPointAt(t);
+    const tan = curve.getTangentAt(t);
+    const right = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+
+    for (const side of [-1, 1]) {
+      const base = new THREE.Vector3(p.x + right.x * side * 0.8, p.y, p.z + right.z * side * 0.8);
+      const top = base.clone().add(new THREE.Vector3(0, 3 + Math.sin(t * 10) * 2, 0));
+      // Simple pole
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, top.y - p.y, 4), archMat);
+      pole.position.copy(base.clone().add(top).multiplyScalar(0.5));
+      pole.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, 0));
+      scene.add(pole);
+
+      // Cross beam between poles
+      if (side === 1) {
+        const otherBase = new THREE.Vector3(p.x - right.x * 0.8, p.y, p.z - right.z * 0.8);
+        const beam = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 1.8), archMat);
+        beam.position.set(p.x, top.y + 0.3, p.z);
+        scene.add(beam);
+      }
+    }
+  }
 }

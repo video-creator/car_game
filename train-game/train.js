@@ -2,75 +2,112 @@ import * as THREE from 'three';
 
 // ── Color Schemes ───────────────────────────────
 const SCHEMES = [
-  { body: 0x2d66c9, stripe: 0xffffff, wagon: 0xcc3322 },
-  { body: 0xcc4411, stripe: 0xffcc00, wagon: 0x2277cc },
-  { body: 0x22aa44, stripe: 0xffffff, wagon: 0xcc8833 },
-  { body: 0x8833cc, stripe: 0xffcc00, wagon: 0x44aa44 },
-  { body: 0xff2266, stripe: 0xffffff, wagon: 0x3388cc },
+  { body: 0x2d66c9, accent: '#ff6b6b', stripe: 0xffffff, wagon: [0xcc3322, 0xffaa00, 0x44cc44, 0x4488ff] },
+  { body: 0xff3366, accent: '#ffdd00', stripe: 0xffffff, wagon: [0xff6633, 0x33cc99, 0x9944ff, 0xffcc00] },
+  { body: 0x22cc88, accent: '#ff8800', stripe: 0xffffff, wagon: [0x3388ff, 0xff44aa, 0x44dd44, 0xff6600] },
+  { body: 0x8833ff, accent: '#00ffcc', stripe: 0xffffff, wagon: [0xff3366, 0x33ff66, 0x66aaff, 0xffcc44] },
+  { body: 0xff6600, accent: '#ff0066', stripe: 0xffffff, wagon: [0x2288dd, 0xff4488, 0x44ff88, 0xcc44ff] },
 ];
 
-// ── Create Locomotive ─────────────────────────
+// ── Create Locomotive (新幹線/子弹头) ──────────
 function makeLoco(scheme) {
   const g = new THREE.Group();
-  const L = 2.8, W = 0.6, H = 0.85;
+  const L = 3.0, W = 0.58, H = 0.75;
 
-  const bodyMat = new THREE.MeshStandardMaterial({ color: scheme.body, roughness: 0.3, metalness: 0.4 });
-  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e2230, roughness: 0.8, metalness: 0.2 });
-  const stripeMat = new THREE.MeshStandardMaterial({ color: scheme.stripe, roughness: 0.3, metalness: 0.1 });
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.05, transparent: true, opacity: 0.45 });
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
-  const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 2 });
+  const bodyMat = new THREE.MeshStandardMaterial({ color: scheme.body, roughness: 0.2, metalness: 0.6 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8, metalness: 0.3 });
+  const stripeMat = new THREE.MeshStandardMaterial({ color: scheme.stripe, roughness: 0.2, metalness: 0.1 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x66ccff, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.5 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222244, roughness: 0.9 });
+  const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 3 });
+  const accentMat = new THREE.MeshStandardMaterial({ color: scheme.stripe, roughness: 0.3, metalness: 0.2 });
 
-  // BODY: BoxGeometry(width=X, height=Y, depth=Z)
-  // Train length along Z axis (front at -Z)
+  // ── Main body (rounded shape via box + curve) ──
   const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, L), bodyMat);
-  body.position.y = 0.55;
+  body.position.y = 0.5;
   g.add(body);
 
-  // Nose (cone at front -Z)
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.5, 10), bodyMat);
-  nose.rotation.x = -Math.PI / 2;
-  nose.position.set(0, 0.55, -L / 2 - 0.15);
-  g.add(nose);
+  // ── Aerodynamic nose (bullet train) ──
+  const noseGroup = new THREE.Group();
+  // Outer shell
+  const noseOuter = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.65, 12), bodyMat);
+  noseOuter.rotation.x = -Math.PI / 2;
+  noseOuter.position.set(0, 0.5, -L / 2 - 0.1);
+  noseGroup.add(noseOuter);
+  // Nose cap (smaller inner cone)
+  const noseInner = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.35, 10), accentMat);
+  noseInner.rotation.x = -Math.PI / 2;
+  noseInner.position.set(0, 0.5, -L / 2 - 0.3);
+  noseGroup.add(noseInner);
+  g.add(noseGroup);
 
-  // Roof
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(W - 0.04, 0.08, L - 0.32),
-    new THREE.MeshStandardMaterial({ color: 0xd7dde6, roughness: 0.6 }));
-  roof.position.set(0, H + 0.22, 0);
-  g.add(roof);
+  // ── Roof fin ──
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.25, L * 0.5), accentMat);
+  fin.position.set(0, H + 0.2, -L * 0.15);
+  g.add(fin);
 
-  // Side stripes
+  // ── Side stripes (dynamic look) ──
   for (const sz of [-1, 1]) {
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, L - 0.15), stripeMat);
-    stripe.position.set(sz * (W / 2 + 0.01), 0.6, 0);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.08, L - 0.2), stripeMat);
+    stripe.position.set(sz * (W / 2 + 0.01), 0.55, 0.05);
     g.add(stripe);
+
+    // Lower accent stripe
+    const lowStripe = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, L - 0.3),
+      new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0xffcc00, emissiveIntensity: 0.3 }));
+    lowStripe.position.set(sz * (W / 2 + 0.01), 0.2, 0.05);
+    g.add(lowStripe);
   }
 
-  // Headlight (at front -Z)
-  const hl = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 4), lightMat);
-  hl.position.set(0, 0.42, -L / 2 - 0.32);
+  // ── Headlight ring ──
+  const hlRing = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.10, 12), lightMat);
+  hlRing.position.set(0, 0.45, -L / 2 - 0.35);
+  hlRing.rotation.x = Math.PI / 2;
+  g.add(hlRing);
+  // Inner headlight
+  const hl = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), lightMat);
+  hl.position.set(0, 0.45, -L / 2 - 0.37);
   g.add(hl);
 
-  // Cab window (at front -Z)
-  const win = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.02), glassMat);
-  win.position.set(0, 0.72, -L / 2 + 0.1);
+  // ── Cab windshield ──
+  const win = new THREE.Mesh(new THREE.BoxGeometry(W * 0.6, 0.2, 0.02), glassMat);
+  win.position.set(0, 0.68, -L / 2 + 0.2);
   g.add(win);
 
-  // Rear light (at back +Z)
-  const rl = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xff3333, emissiveIntensity: 0.5 }));
-  rl.position.set(0, 0.42, L / 2 + 0.1);
-  g.add(rl);
+  // ── Side windows ──
+  for (let wi = 0; wi < 3; wi++) {
+    const wz = -L / 4 + wi * (L / 4.5);
+    for (const sx of [-1, 1]) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.12, 0.18), glassMat);
+      w.position.set(sx * (W / 2 + 0.01), 0.6, wz);
+      g.add(w);
+    }
+  }
 
-  // Bogies - wheel sets along Z (length) axis
+  // ── Rear lights ──
+  for (const sx of [-1, 1]) {
+    const rl = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 4),
+      new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xff3333, emissiveIntensity: 0.8 }));
+    rl.position.set(sx * 0.15, 0.35, L / 2 + 0.08);
+    g.add(rl);
+  }
+
+  // ── Wheels / Bogies ──
   const wheelPairs = [];
-  for (const wz of [-L * 0.27, L * 0.27]) {
-    for (const wx of [-0.18, 0.18]) {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 8), wheelMat);
+  for (const wz of [-L * 0.28, L * 0.28]) {
+    for (const wx of [-0.2, 0.2]) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 10), wheelMat);
       w.rotation.z = Math.PI / 2;
-      w.position.set(wx * 1.2, 0.08, wz);
+      w.position.set(wx * 1.2, 0.06, wz);
       g.add(w);
       wheelPairs.push(w);
     }
+    // Axle
+    const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.5, 4),
+      new THREE.MeshStandardMaterial({ color: 0x444466, metalness: 0.8 }));
+    axle.rotation.z = Math.PI / 2;
+    axle.position.set(0, 0.04, wz);
+    g.add(axle);
   }
 
   g._len = L;
@@ -78,33 +115,57 @@ function makeLoco(scheme) {
   return g;
 }
 
-// ── Create Wagon ─────────────────────────────
+// ── Create Wagon (彩虹车厢) ────────────────────
 function makeWagon(color) {
   const g = new THREE.Group();
-  const L = 2.0, W = 0.54, H = 0.65;
+  const L = 2.0, W = 0.52, H = 0.6;
 
-  const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.3 });
-  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e2230, roughness: 0.8 });
+  const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.5 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8 });
 
-  // Body (length along Z)
+  // Body
   const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, L), bodyMat);
-  body.position.y = 0.38;
+  body.position.y = 0.35;
   g.add(body);
 
-  // Roof
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(W - 0.02, 0.06, L - 0.18),
-    new THREE.MeshStandardMaterial({ color: 0xd0d4d8, roughness: 0.6 }));
-  roof.position.y = 0.75;
+  // Rounded roof
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(W - 0.02, 0.06, L - 0.15),
+    new THREE.MeshStandardMaterial({ color: 0xe0e4e8, roughness: 0.5, metalness: 0.3 }));
+  roof.position.y = 0.68;
   g.add(roof);
 
-  // Wheels
-  for (const wz of [-0.7, 0.7]) {
-    for (const wx of [-0.15, 0.15]) {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 8), darkMat);
-      w.rotation.z = Math.PI / 2;
-      w.position.set(wx * 1.2, 0.08, wz);
+  // Windows
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ddff, roughness: 0.05, transparent: true, opacity: 0.4 });
+  for (let wi = 0; wi < 3; wi++) {
+    const wz = -L * 0.35 + wi * (L * 0.35);
+    for (const sx of [-1, 1]) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.10, 0.16), glassMat);
+      w.position.set(sx * (W / 2 + 0.01), 0.4, wz);
       g.add(w);
     }
+  }
+
+  // Side stripes
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.1 });
+  for (const sz of [-1, 1]) {
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, L - 0.15), stripeMat);
+    stripe.position.set(sz * (W / 2 + 0.01), 0.55, 0);
+    g.add(stripe);
+  }
+
+  // Wheels
+  for (const wz of [-0.65, 0.65]) {
+    for (const wx of [-0.15, 0.15]) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.04, 8), darkMat);
+      w.rotation.z = Math.PI / 2;
+      w.position.set(wx * 1.2, 0.06, wz);
+      g.add(w);
+    }
+    const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.4, 4),
+      new THREE.MeshStandardMaterial({ color: 0x444466, metalness: 0.8 }));
+    axle.rotation.z = Math.PI / 2;
+    axle.position.set(0, 0.04, wz);
+    g.add(axle);
   }
 
   g._len = L;
@@ -116,26 +177,26 @@ export function createPlayerTrain(scene) {
   const scheme = SCHEMES[Math.floor(Math.random() * SCHEMES.length)];
   const train = {
     cars: [], couplers: [], hp: 100,
-    speed: 0, baseSpeed: 0,
-    trackPos: 0,
-    onBranch: -1, branchProgress: 0,
-    isPlayer: true,
+    speed: 0, baseSpeed: 0, trackPos: 0,
+    onBranch: -1, branchProgress: 0, isPlayer: true,
   };
 
   const loco = makeLoco(scheme);
   scene.add(loco);
   train.cars.push({ mesh: loco, len: loco._len });
 
+  // Colorful rainbow wagons
   for (let i = 0; i < 4; i++) {
-    const w = makeWagon(i % 2 === 0 ? scheme.wagon : 0xcc3322);
+    const color = scheme.wagon[i % scheme.wagon.length];
+    const w = makeWagon(color);
     scene.add(w);
     train.cars.push({ mesh: w, len: w._len });
   }
 
   // Couplers
-  const coupMat = new THREE.MeshStandardMaterial({ color: 0x505260, roughness: 0.7 });
+  const coupMat = new THREE.MeshStandardMaterial({ color: 0x6060aa, roughness: 0.5, metalness: 0.6 });
   for (let i = 0; i < train.cars.length - 1; i++) {
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 4), coupMat);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.3, 6), coupMat);
     scene.add(rod);
     train.couplers.push(rod);
   }
@@ -148,28 +209,26 @@ export function createNPCTrain(scene) {
   const train = {
     cars: [], couplers: [], hp: 100,
     speed: 0, baseSpeed: 12 + Math.random() * 8,
-    trackPos: 0,
-    onBranch: -1, branchProgress: 0,
-    isPlayer: false,
+    trackPos: 0, onBranch: -1, branchProgress: 0, isPlayer: false,
   };
 
   const loco = makeLoco(scheme);
   scene.add(loco);
   train.cars.push({ mesh: loco, len: loco._len });
 
-  for (let i = 0; i < 3; i++) {
-    const w = makeWagon(i % 2 === 0 ? scheme.wagon : 0xcc3322);
+  for (let i = 0; i < 2; i++) {
+    const color = scheme.wagon[i % scheme.wagon.length];
+    const w = makeWagon(color);
     scene.add(w);
     train.cars.push({ mesh: w, len: w._len });
   }
 
-  const coupMat = new THREE.MeshStandardMaterial({ color: 0x505260, roughness: 0.7 });
+  const coupMat = new THREE.MeshStandardMaterial({ color: 0x6060aa, roughness: 0.5, metalness: 0.6 });
   for (let i = 0; i < train.cars.length - 1; i++) {
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 4), coupMat);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.3, 6), coupMat);
     scene.add(rod);
     train.couplers.push(rod);
   }
-
   return train;
 }
 
@@ -189,7 +248,6 @@ export function updateTrainOnTrack(train, ts) {
     const c = train.cars[i];
     const centerDist = accDist + c.len * 0.5;
 
-    // Get position from track
     let pos, tangent;
     if (train.onBranch >= 0 && train.onBranch < ts.junctions.length) {
       const j = ts.junctions[train.onBranch];
@@ -209,19 +267,19 @@ export function updateTrainOnTrack(train, ts) {
     }
 
     c.mesh.position.copy(pos);
-    c.mesh.position.y += 0.35;
+    c.mesh.position.y += 0.25;
 
-    // Align train's forward direction (-Z) to track tangent
+    // Align train to track tangent
     _quat.setFromUnitVectors(_fwd, tangent.clone().normalize());
     c.mesh.quaternion.copy(_quat);
 
-    // Wheel rotation
+    // Wheel spin
     if (c.mesh._wheelPairs) {
-      const wr = train.trackPos * 0.5;
+      const wr = train.trackPos * 0.8;
       for (const wp of c.mesh._wheelPairs) wp.rotation.z = wr;
     }
 
-    // Coupler connection points (front at -Z, back at +Z)
+    // Coupler points
     const fwd = new THREE.Vector3(0, 0, -c.len * 0.5 + 0.02).applyQuaternion(c.mesh.quaternion).add(c.mesh.position);
     const bwd = new THREE.Vector3(0, 0, c.len * 0.5 - 0.02).applyQuaternion(c.mesh.quaternion).add(c.mesh.position);
     carWorld.push({ front: fwd, back: bwd });
@@ -229,7 +287,7 @@ export function updateTrainOnTrack(train, ts) {
     accDist += c.len + COUPLE_GAP;
   }
 
-  // Update couplers
+  // Couplers
   for (let i = 0; i < Math.min(train.couplers.length, carWorld.length - 1); i++) {
     const rod = train.couplers[i];
     const a = carWorld[i].back;
@@ -237,7 +295,7 @@ export function updateTrainOnTrack(train, ts) {
     const dir = new THREE.Vector3().copy(b).sub(a);
     const len = dir.length();
     rod.position.copy(a.clone().add(b).multiplyScalar(0.5));
-    rod.position.y += 0.25;
+    rod.position.y += 0.2;
     if (len > 0.01) {
       _quat.setFromUnitVectors(_up, dir.clone().normalize());
       rod.quaternion.copy(_quat);
