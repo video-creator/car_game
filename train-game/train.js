@@ -179,8 +179,8 @@ export function updateTrainOnTrack(train, ts) {
 
   const carWorld = [];
   const _up = new THREE.Vector3(0, 1, 0);
-  const _tmpM = new THREE.Vector3();
-  const _tmpQ = new THREE.Quaternion();
+  const _fwd = new THREE.Vector3(0, 0, -1);
+  const _quat = new THREE.Quaternion();
 
   for (let i = 0; i < train.cars.length; i++) {
     const c = train.cars[i];
@@ -195,7 +195,6 @@ export function updateTrainOnTrack(train, ts) {
         pos = j.branchCurve.getPointAt(t);
         tangent = j.branchCurve.getTangentAt(t);
       } else {
-        // Fallback to main track
         const result = ts.getPointOnMain(train.trackPos - centerDist);
         pos = result.pos;
         tangent = result.tangent;
@@ -209,20 +208,9 @@ export function updateTrainOnTrack(train, ts) {
     c.mesh.position.copy(pos);
     c.mesh.position.y += 0.35;
 
-    // Yaw from tangent
-    const yaw = Math.atan2(tangent.x, tangent.z);
-    c.mesh.rotation.set(0, yaw, 0);
-
-    // Bank
-    if (i === 0) {
-      const nextTan = train.onBranch >= 0
-        ? ts.junctions[train.onBranch]?.branchCurve.getTangentAt(Math.min(1, train.branchProgress + 0.02))
-        : ts.getPointOnMain(train.trackPos + 1).tangent;
-      if (nextTan) {
-        const curve = tangent.clone().cross(nextTan).y;
-        c.mesh.rotation.z = Math.max(-0.1, Math.min(0.1, -curve * 2));
-      }
-    }
+    // Align train's forward (-Z) to track tangent direction
+    _quat.setFromUnitVectors(_fwd, tangent.clone().normalize());
+    c.mesh.quaternion.copy(_quat);
 
     // Wheel rotation
     if (c.mesh._wheelPairs) {
@@ -230,9 +218,9 @@ export function updateTrainOnTrack(train, ts) {
       for (const wp of c.mesh._wheelPairs) wp.rotation.x = wr;
     }
 
-    // Car world for couplers
-    const fwd = new THREE.Vector3(c.len * 0.5 - 0.02, 0, 0).applyQuaternion(c.mesh.quaternion).add(c.mesh.position);
-    const bwd = new THREE.Vector3(-c.len * 0.5 + 0.02, 0, 0).applyQuaternion(c.mesh.quaternion).add(c.mesh.position);
+    // Car world for couplers (front = -Z, back = +Z)
+    const fwd = new THREE.Vector3(0, 0, -c.len * 0.5 + 0.02).applyQuaternion(c.mesh.quaternion).add(c.mesh.position);
+    const bwd = new THREE.Vector3(0, 0, c.len * 0.5 - 0.02).applyQuaternion(c.mesh.quaternion).add(c.mesh.position);
     carWorld.push({ front: fwd, back: bwd });
 
     accDist += c.len + COUPLE_GAP;
@@ -243,13 +231,13 @@ export function updateTrainOnTrack(train, ts) {
     const rod = train.couplers[i];
     const a = carWorld[i].back;
     const b = carWorld[i + 1].front;
-    const dir = _tmpM.copy(b).sub(a);
+    const dir = new THREE.Vector3().copy(b).sub(a);
     const len = dir.length();
     rod.position.copy(a.clone().add(b).multiplyScalar(0.5));
     rod.position.y += 0.25;
     if (len > 0.01) {
-      _tmpQ.setFromUnitVectors(_up, dir.clone().normalize());
-      rod.quaternion.copy(_tmpQ);
+      _quat.setFromUnitVectors(_up, dir.clone().normalize());
+      rod.quaternion.copy(_quat);
       rod.scale.set(1, len, 1);
     }
   }

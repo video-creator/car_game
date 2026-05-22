@@ -213,7 +213,7 @@ function updateCamera(train, camera, dt) {
   const pos = train.cars[0].mesh.position;
 
   if (camMode === 'third') {
-    const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(train.cars[0].mesh.quaternion);
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(train.cars[0].mesh.quaternion);
     const behind = pos.clone().sub(dir.clone().multiplyScalar(20));
     behind.y += 8;
     const ahead = pos.clone().add(dir.clone().multiplyScalar(10));

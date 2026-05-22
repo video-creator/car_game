@@ -36,6 +36,7 @@ export function buildTrackSystem(scene) {
 
     const branchCurve = new THREE.CatmullRomCurve3([bp1, bp1b, bp2, bp3, bp3b, bp4], false, 'catmullrom', 0.5);
     junctions.push({
+      name: '🌲 山林路线',
       entryT: 0.22, entryDistance: 0.22 * mainLen,
       exitT: 0.38, exitDistance: 0.38 * mainLen,
       branchCurve,
@@ -53,6 +54,7 @@ export function buildTrackSystem(scene) {
 
     const branchCurve = new THREE.CatmullRomCurve3([bp1, bp1b, bp2, bp3b, bp4], false, 'catmullrom', 0.5);
     junctions.push({
+      name: '🚇 隧道低线',
       entryT: 0.52, entryDistance: 0.52 * mainLen,
       exitT: 0.70, exitDistance: 0.70 * mainLen,
       branchCurve,
@@ -71,6 +73,7 @@ export function buildTrackSystem(scene) {
       bp4
     ], false, 'catmullrom', 0.5);
     junctions.push({
+      name: '⚡ 高速直道',
       entryT: 0.78, entryDistance: 0.78 * mainLen,
       exitT: 0.92, exitDistance: 0.92 * mainLen,
       branchCurve,
