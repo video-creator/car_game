@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>火车网络模拟器</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0e1218;overflow:hidden;font-family:"Microsoft YaHei",Arial,sans-serif}
+#hud{position:fixed;top:0;left:0;right:0;z-index:20;pointer-events:none}
+#top{display:flex;justify-content:space-between;padding:10px 14px;align-items:flex-start}
+.panel{background:rgba(0,0,0,.68);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 14px;color:#fff}
+#speedNum{font-size:36px;font-weight:900;line-height:1;color:#34f5d0;text-align:center}
+#speedUnit{font-size:11px;color:#aaa;text-align:center}
+#title{font-weight:900;font-size:20px;letter-spacing:2px;padding:10px 18px;background:linear-gradient(135deg,#39f2c5,#7fffd4);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#stats{font-size:12px;line-height:1.8;text-align:right}
+#stats b{color:#34f5d0}
+#controls{position:fixed;bottom:15px;left:50%;transform:translateX(-50%);z-index:30;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+button{padding:7px 13px;border:none;border-radius:14px;cursor:pointer;font-size:12px;font-weight:700;transition:transform .12s}
+button:hover{transform:translateY(-2px)}
+#btnHome{background:linear-gradient(135deg,#2d3e51,#4b6d96);color:#fff}
+#btnView{background:linear-gradient(135deg,#a18cd1,#fbc2eb);color:#111}
+#btnSpawn{background:linear-gradient(135deg,#f5576c,#f093fb);color:#fff}
+#btnReset{background:linear-gradient(135deg,#fa709a,#fee140);color:#111}
+#hint{position:fixed;bottom:55px;left:12px;z-index:30;background:rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.13);border-radius:10px;color:#ddd;font-size:11px;line-height:1.9;padding:8px 12px}
+#hint span{color:#34f5d0;font-weight:bold}
+#junctionHud{position:fixed;bottom:55px;right:12px;z-index:30;background:rgba(0,0,0,.62);border:1px solid rgba(52,245,208,.35);border-radius:10px;color:#fff;padding:8px 12px;font-size:11px;text-align:center;min-width:130px}
+#junctionArrow{font-size:20px;color:#34f5d0;font-weight:900;letter-spacing:1px}
+#damage{position:fixed;bottom:55px;left:205px;z-index:30;display:flex;flex-direction:column;gap:4px}
+.row{display:flex;align-items:center;gap:6px;color:#ddd;font-size:11px}
+.lab{width:52px;text-align:right;color:#aaa}
+.bg{width:92px;height:7px;background:rgba(255,255,255,.12);border-radius:3px;overflow:hidden}
+.fill{height:100%;width:100%;background:#00ff88;transition:width .25s,background .25s}
+#flash{position:fixed;inset:0;z-index:50;pointer-events:none;opacity:0;transition:opacity .06s}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div id="top">
+    <div class="panel" style="min-width:86px">
+      <div id="speedNum">0</div>
+      <div id="speedUnit">km/h</div>
+    </div>
+    <div id="title">🚄 铁路路网模拟器</div>
+    <div class="panel" id="stats">
+      <div>🚆 列车总数: <b id="sTrain">0</b></div>
+      <div>💥 碰撞次数: <b id="sCrash">0</b></div>
+      <div>📷 视角: <b id="sView">第三人称</b></div>
+    </div>
+  </div>
+</div>
+
+<div id="controls">
+  <button id="btnHome" onclick="location.href='./menu.html'">🏠 主菜单</button>
+  <button id="btnView">📷 视角 [V]</button>
+  <button id="btnSpawn">🚆 对向列车 [F]</button>
+  <button id="btnReset">🔄 重置</button>
+</div>
+
+<div id="hint">
+  <div><span>W/↑</span> 加速前进　<span>S/↓</span> 刹车/倒退</div>
+  <div><span>A/←</span> 分叉左线　<span>D/→</span> 分叉右线</div>
+  <div><span>空格</span> 紧急制动　<span>V</span> 视角切换</div>
+  <div><span>F</span> 召唤对向列车</div>
+</div>
+
+<div id="junctionHud">
+  <div style="color:#999;font-size:10px">前方分叉</div>
+  <div id="junctionArrow">直行</div>
+  <div id="junctionName" style="color:#34f5d0;font-size:10px">无分叉</div>
+</div>
+
+<div id="damage">
+  <div class="row"><span class="lab">车头</span><div class="bg"><div class="fill" id="dLoco"></div></div></div>
+  <div class="row"><span class="lab">车厢</span><div class="bg"><div class="fill" id="dWagon"></div></div></div>
+  <div class="row"><span class="lab">轮对</span><div class="bg"><div class="fill" id="dWheel"></div></div></div>
+</div>
+
+<div id="flash"></div>
+
+<script src="./three.min.js"></script>
+<script>
+'use strict';
+
+// ════════════════════════════════════════════
+//  基础场景
+// ════════════════════════════════════════════
+const renderer = new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.2));
+renderer.setSize(innerWidth,innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x7eb0d6);
+scene.fog = new THREE.FogExp2(0x8ab8d6, 0.0015);
+
+const camera = new THREE.PerspectiveCamera(64, innerWidth/innerHeight, 0.4, 2000);
+camera.position.set(0,14,28);
+
+window.addEventListener('resize',()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+scene.add(new THREE.AmbientLight(0xffffff,0.74));
+const sun = new THREE.DirectionalLight(0xfff0d0,1.05);
+sun.position.set(120,200,80); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xaad0ff,0.35);
+fill.position.set(-100,30,-80); scene.add(fill);
+
+const MAT = {
+  ground:new THREE.MeshLambertMaterial({color:0x4a7a42}),
+  rail:new THREE.MeshLambertMaterial({color:0xb0b4b8}),
+  sleeper:new THREE.MeshLambertMaterial({color:0x4a3520}),
+  ballast:new THREE.MeshLambertMaterial({color:0x7a7060}),
+  pole:new THREE.MeshLambertMaterial({color:0x606472}),
+  wheel:new THREE.MeshLambertMaterial({color:0x1a1a1a}),
+  hub:new THREE.MeshLambertMaterial({color:0x686868}),
+  glass:new THREE.MeshLambertMaterial({color:0x93c6e6,transparent:true,opacity:0.66}),
+  dark:new THREE.MeshLambertMaterial({color:0x1e2230}),
+  coupler:new THREE.MeshLambertMaterial({color:0x505260}),
+  spark:new THREE.MeshBasicMaterial({color:0xffc933}),
+};
+function mat(c){ return new THREE.MeshLambertMaterial({color:c}); }
+function rnd(a,b){ return a+Math.random()*(b-a); }
+function pick(arr){ return arr[(Math.random()*arr.length)|0]; }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+const TAU = Math.PI*2;
+
+// 地面
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000,6000,1,1), MAT.ground);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -0.32;
+scene.add(ground);
+
+// ════════════════════════════════════════════
+//  路网系统：节点 + 路段
+// ════════════════════════════════════════════
+/*
+  路网由 节点(Node) 和 路段(Segment) 组成：
+  - Node: 有坐标 (x,z) 和方向角，记录连出的 segment 列表
+  - Segment: 连接两个 Node，可以是直线或三次贝塞尔曲线
+    - 预采样为点数组，供列车行驶用
+  列车沿路段行驶，到达节点时根据玩家输入或随机选择下一路段
+*/
+
+const GAUGE   = 0.75;  // 轨距半宽
+const RAIL_W  = 0.07;
+const RAIL_H  = 0.14;
+const BALLAST_W = 2.2;
+
+// ── 节点定义 ──────────────────────────────
+// 每个节点：{id, x, z, [可选 angle]}
+// angle 是到达该节点时的"主方向"角（弧度，从+X轴顺时针，0=朝+Z）
+const NODES = [];
+function mkNode(id, x, z){ const n={id,x,z,segs:[]}; NODES[id]=n; return n; }
+
+// 节点布局：创建一个覆盖大地图的路网
+// 主干线（横向，贯穿地图）
+const nA0=mkNode( 0,-400,  0);   // 主干线西端
+const nA1=mkNode( 1,-200,  0);   // 主干西—站点1（分叉口）
+const nA2=mkNode( 2,   0,  0);   // 主干线中央（分叉口）
+const nA3=mkNode( 3, 200,  0);   // 主干东—站点2（分叉口）
+const nA4=mkNode( 4, 400,  0);   // 主干线东端
+
+// 上行支线（偏北）
+const nB0=mkNode( 5,-200,-120);  // 支线西
+const nB1=mkNode( 6,   0,-180);  // 支线中
+const nB2=mkNode( 7, 200,-120);  // 支线东
+
+// 下行支线（偏南）
+const nC0=mkNode( 8,-200, 120);  // 支线西
+const nC1=mkNode( 9,   0, 180);  // 支线中
+const nC2=mkNode(10, 200, 120);  // 支线东
+
+// 纵向线路（南北向）
+const nD0=mkNode(11,   0,-380);  // 北端
+const nD1=mkNode(12,   0,-280);  // 北段中
+const nD2=mkNode(13,   0, 280);  // 南段中
+const nD3=mkNode(14,   0, 380);  // 南端
+
+// 对角线（西南—东北）
+const nE0=mkNode(15,-300, 240);  // 对角线西南
+const nE1=mkNode(16,  -80, 80);  // 对角线中1
+const nE2=mkNode(17,  80,-80);   // 对角线中2
+const nE3=mkNode(18, 300,-240);  // 对角线东北
+
+// 环形绕行线（东侧绕行）
+const nF0=mkNode(19, 300, 200);  // 东南
+const nF1=mkNode(20, 380,   0);  // 正东
+const nF2=mkNode(21, 300,-200);  // 东北
+
+// ── 路段定义 ──────────────────────────────
+const SEGMENTS = [];
+let _segId = 0;
+
+/*
+  mkSeg(nodeA, nodeB, ctrlA_offset, ctrlB_offset):
+    nodeA/B: 起止节点
+    ctrlA: 从 A 出发的控制点偏移 [dx, dz]（用于贝塞尔曲线，null = 直线）
+    ctrlB: 到达 B 的控制点偏移 [dx, dz]
+
+  路段沿 A→B 方向参数化，t∈[0,1]
+  预采样 points[]（世界坐标），并计算各段长度 cumLen[]
+*/
+const SEG_SAMPLES = 80;  // 每条路段采样点数
+
+function mkSeg(nA, nB, ctrlA=null, ctrlB=null){
+  const seg = {
+    id: _segId++,
+    nA: nA.id,
+    nB: nB.id,
+    points: [],     // {x,z}[]
+    cumLen: [0],    // 累积弧长，长度=points.length-1（最后是总长）
+    totalLen: 0,
+  };
+  SEGMENTS.push(seg);
+
+  // 计算贝塞尔控制点
+  const ax=nA.x, az=nA.z;
+  const bx=nB.x, bz=nB.z;
+  let p1x=ax, p1z=az, p2x=bx, p2z=bz;
+  if(ctrlA){ p1x+=ctrlA[0]; p1z+=ctrlA[1]; }
+  if(ctrlB){ p2x+=ctrlB[0]; p2z+=ctrlB[1]; }
+
+  // 采样三次贝塞尔（或直线）
+  for(let i=0;i<=SEG_SAMPLES;i++){
+    const t=i/SEG_SAMPLES;
+    let x,z;
+    if(ctrlA || ctrlB){
+      // 三次贝塞尔
+      const mt=1-t;
+      x = mt*mt*mt*ax + 3*mt*mt*t*p1x + 3*mt*t*t*p2x + t*t*t*bx;
+      z = mt*mt*mt*az + 3*mt*mt*t*p1z + 3*mt*t*t*p2z + t*t*t*bz;
+    } else {
+      x = ax + (bx-ax)*t;
+      z = az + (bz-az)*t;
+    }
+    seg.points.push({x,z});
+  }
+
+  // 计算累积弧长
+  let cum = 0;
+  for(let i=1;i<seg.points.length;i++){
+    const dx=seg.points[i].x-seg.points[i-1].x;
+    const dz=seg.points[i].z-seg.points[i-1].z;
+    cum += Math.hypot(dx,dz);
+    seg.cumLen.push(cum);
+  }
+  seg.totalLen = cum;
+
+  // 挂到节点
+  nA.segs.push({segId:seg.id, dir:1});   // A→B 方向
+  nB.segs.push({segId:seg.id, dir:-1});  // B→A 方向
+
+  return seg;
+}
+
+// 主干线（直线）
+mkSeg(nA0, nA1);
+mkSeg(nA1, nA2);
+mkSeg(nA2, nA3);
+mkSeg(nA3, nA4);
+
+// 上行支线（弯曲）
+mkSeg(nA1, nB0, [0,-40], [0,40]);
+mkSeg(nB0, nB1, [60,0], [-60,0]);
+mkSeg(nB1, nB2, [60,0], [-60,0]);
+mkSeg(nB2, nA3, [0,40], [0,-40]);
+
+// 下行支线（弯曲）
+mkSeg(nA1, nC0, [0,40], [0,-40]);
+mkSeg(nC0, nC1, [60,0], [-60,0]);
+mkSeg(nC1, nC2, [60,0], [-60,0]);
+mkSeg(nC2, nA3, [0,-40], [0,40]);
+
+// 纵向线（贝塞尔弯曲连接到主干线）
+mkSeg(nD0, nD1);  // 直线
+mkSeg(nD1, nB1, [0,50], [-50,0]);  // 弯曲到支线
+mkSeg(nB1, nD1, [50,0], [0,-50]);  // 反向重复（用于另一方向索引，实际上上面已含双向）
+// 下方纵线
+mkSeg(nD2, nD3);
+mkSeg(nC1, nD2, [0,-50], [50,0]);
+
+// 对角线（斜线）
+mkSeg(nE0, nE1, [60,-60], [-60,60]);
+mkSeg(nE1, nA2, null, null);  // 直线到中心
+mkSeg(nA2, nE2, null, null);
+mkSeg(nE2, nE3, [60,-60], [-60,60]);
+
+// 东侧绕行环
+mkSeg(nA3, nF0, [0,60], [-60,0]);
+mkSeg(nF0, nF1, [60,0], [0,-60]);
+mkSeg(nF1, nF2, [0,-60], [60,0]);
+mkSeg(nF2, nA3, [-60,0], [0,60]);
+
+// 连接南北支线到主干
+mkSeg(nC0, nE0, [-40,40], [40,-40]);
+mkSeg(nE0, nD3, [0,60], [0,-60]);
+
+// ── 路段采样函数 ─────────────────────────
+/*
+  在路段 seg 上，给定参数 t∈[0,1]（按弧长），返回 {pos:{x,z}, tan:{x,z}}
+  dir=1 → A→B; dir=-1 → B→A
+*/
+function sampleSeg(seg, t, dir){
+  // t∈[0,1]，dir决定方向
+  const tt = dir>0 ? t : 1-t;
+  const targetLen = tt * seg.totalLen;
+
+  // 二分查找累积长度
+  let lo=0, hi=seg.cumLen.length-2;
+  while(lo<hi){
+    const mid=(lo+hi)>>1;
+    if(seg.cumLen[mid+1]<targetLen) lo=mid+1;
+    else hi=mid;
+  }
+  const i=lo;
+  const seg0=seg.cumLen[i], seg1=seg.cumLen[i+1];
+  const frac = seg1>seg0 ? (targetLen-seg0)/(seg1-seg0) : 0;
+
+  const p0=seg.points[i], p1=seg.points[i+1]||p0;
+  const px = p0.x+(p1.x-p0.x)*frac;
+  const pz = p0.z+(p1.z-p0.z)*frac;
+
+  // 切线（用相邻点差分）
+  const pA=seg.points[Math.max(0,i-1+(frac>0.5?1:0))];
+  const pB=seg.points[Math.min(seg.points.length-1,i+1+(frac>0.5?1:0))];
+  let tx=pB.x-pA.x, tz=pB.z-pA.z;
+  const tl=Math.hypot(tx,tz)||1;
+  tx/=tl; tz/=tl;
+  if(dir<0){ tx=-tx; tz=-tz; }
+
+  return { pos:{x:px,z:pz}, tan:{x:tx,z:tz} };
+}
+
+// 获取节点在某路段上的方向（dir=1:从该节点出发朝B，dir=-1:从B到A）
+function nodeExitSegs(nodeId, fromSegId){
+  // 返回从 nodeId 可以继续前进的路段列表（排除来的那条）
+  const n = NODES[nodeId];
+  return n.segs.filter(e => e.segId !== fromSegId);
+}
+
+// ── 轨道可视化 ──────────────────────────
+// 钢轨挤出网格
+function buildRailMesh(pts3){
+  const n = pts3.length;
+  if(n<2) return null;
+  const positions=[], indices=[];
+  for(let i=0;i<n;i++){
+    const p=pts3[i];
+    const prev=pts3[Math.max(0,i-1)];
+    const next=pts3[Math.min(n-1,i+1)];
+    const tx=next.x-prev.x, tz=next.z-prev.z;
+    const tl=Math.hypot(tx,tz)||1;
+    const nx=-tz/tl, nz=tx/tl;
+    const hw=RAIL_W*0.5;
+    // 4顶点截面：底右、底左、顶左、顶右
+    positions.push(
+      p.x+nx*hw, p.y,        p.z+nz*hw,
+      p.x-nx*hw, p.y,        p.z-nz*hw,
+      p.x-nx*hw, p.y+RAIL_H, p.z-nz*hw,
+      p.x+nx*hw, p.y+RAIL_H, p.z+nz*hw,
+    );
+  }
+  for(let i=0;i<n-1;i++){
+    const b=i*4,f=(i+1)*4;
+    indices.push(b+3,f+3,f+2, b+3,f+2,b+2);  // 顶面
+    indices.push(b+2,f+2,f+1, b+2,f+1,b+1);  // 左面
+    indices.push(b+0,f+0,f+3, b+0,f+3,b+3);  // 右面
+    indices.push(b+1,f+1,f+0, b+1,f+0,b+0);  // 前面
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, MAT.rail);
+}
+
+// 枕木和道砟 InstancedMesh
+const TOTAL_SLEEPER_SLOTS = SEGMENTS.length * 60;
+const sleeperGeo = new THREE.BoxGeometry(BALLAST_W*2, 0.10, 0.22);
+const sleeperInst = new THREE.InstancedMesh(sleeperGeo, MAT.sleeper, TOTAL_SLEEPER_SLOTS);
+sleeperInst.count = 0;
+scene.add(sleeperInst);
+
+const ballastGeo = new THREE.BoxGeometry(BALLAST_W*2, 0.18, 0.4);
+const ballastInst = new THREE.InstancedMesh(ballastGeo, MAT.ballast, TOTAL_SLEEPER_SLOTS);
+ballastInst.count = 0;
+scene.add(ballastInst);
+
+const railGroup = new THREE.Group(); scene.add(railGroup);
+
+function buildAllTrackVisuals(){
+  const m4=new THREE.Matrix4(), m4b=new THREE.Matrix4();
+  let sIdx=0;
+  const RAIL_Y = 0.18;
+
+  for(const seg of SEGMENTS){
+    const ptsL=[], ptsR=[];
+    const N=seg.points.length;
+    for(let i=0;i<N;i++){
+      const p=seg.points[i];
+      // 切线
+      const prev=seg.points[Math.max(0,i-1)];
+      const next=seg.points[Math.min(N-1,i+1)];
+      const tx=next.x-prev.x, tz=next.z-prev.z;
+      const tl=Math.hypot(tx,tz)||1;
+      const nx=-tz/tl, nz=tx/tl;
+      ptsL.push({x:p.x+nx*GAUGE, y:RAIL_Y, z:p.z+nz*GAUGE});
+      ptsR.push({x:p.x-nx*GAUGE, y:RAIL_Y, z:p.z-nz*GAUGE});
+
+      // 枕木：每隔约2m放1根
+      if(i<N-1 && i%2===0 && sIdx<TOTAL_SLEEPER_SLOTS){
+        const ang=Math.atan2(tx,tz);
+        m4.makeRotationY(ang); m4.setPosition(p.x,0.10,p.z);
+        sleeperInst.setMatrixAt(sIdx,m4);
+        m4b.makeRotationY(ang); m4b.setPosition(p.x,0.01,p.z);
+        ballastInst.setMatrixAt(sIdx,m4b);
+        sIdx++;
+      }
+    }
+    const mL=buildRailMesh(ptsL), mR=buildRailMesh(ptsR);
+    if(mL) railGroup.add(mL);
+    if(mR) railGroup.add(mR);
+  }
+  sleeperInst.count=sIdx; ballastInst.count=sIdx;
+  sleeperInst.instanceMatrix.needsUpdate=true;
+  ballastInst.instanceMatrix.needsUpdate=true;
+
+  // 分叉口标记（黄色小圆柱，放在每个有3+路段的节点处）
+  for(const n of NODES){
+    if(!n) continue;
+    if(n.segs.length>=3){
+      const jMesh=new THREE.Mesh(
+        new THREE.CylinderGeometry(1.0,1.0,0.3,8),
+        new THREE.MeshLambertMaterial({color:0xffcc00})
+      );
+      jMesh.position.set(n.x,0.15,n.z);
+      scene.add(jMesh);
+    }
+  }
+}
+buildAllTrackVisuals();
+
+// 电线杆（沿主干线布置）
+{
+  const poleGeo=new THREE.CylinderGeometry(0.05,0.07,5.5,6);
+  const armGeo=new THREE.CylinderGeometry(0.025,0.025,3.0,5);
+  const poleN=30;
+  const mainSeg=SEGMENTS[1]; // 主干线中段
+  for(let i=0;i<poleN;i++){
+    const tt=i/poleN;
+    const sp=sampleSeg(mainSeg,tt,1);
+    const nx=-sp.tan.z, nz=sp.tan.x;
+    const pg=new THREE.Group();
+    pg.position.set(sp.pos.x-nx*5.5,0,sp.pos.z-nz*5.5);
+    const post=new THREE.Mesh(poleGeo,MAT.pole); post.position.y=2.75; pg.add(post);
+    const arm=new THREE.Mesh(armGeo,MAT.pole); arm.rotation.z=Math.PI/2; arm.position.y=5.4; pg.add(arm);
+    scene.add(pg);
+  }
+}
+
+// ════════════════════════════════════════════
+//  车辆建模
+// ════════════════════════════════════════════
+const LOCO_LEN = 2.6;
+const LOCO_WID = 0.57;
+const WAGON_LEN = 2.0;
+const WAGON_WID = 0.53;
+const COUPLE_GAP = 0.14;
+
+function wheelPair(r=0.09){
+  const g=new THREE.Group();
+  const axle=new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,0.65,4),MAT.hub);
+  axle.rotation.z=Math.PI/2; g.add(axle);
+  for(const s of [-1,1]){
+    const w=new THREE.Mesh(new THREE.CylinderGeometry(r,r,0.07,6),MAT.wheel);
+    w.rotation.z=Math.PI/2; w.position.x=s*0.33; g.add(w);
+    const fl=new THREE.Mesh(new THREE.CylinderGeometry(r+0.02,r+0.02,0.02,6),MAT.wheel);
+    fl.rotation.z=Math.PI/2; fl.position.x=s*0.33; g.add(fl);
+  }
+  g._isWheelPair=true;
+  return g;
+}
+
+function bogie(color=0x2c3240){
+  const g=new THREE.Group();
+  const f=new THREE.Mesh(new THREE.BoxGeometry(0.71,0.07,0.42),mat(color));
+  f.position.y=0.08; g.add(f);
+  const w1=wheelPair(); w1.position.set(0,0.11,-0.11); g.add(w1);
+  const w2=wheelPair(); w2.position.set(0,0.11, 0.11); g.add(w2);
+  g._wheelPairs=[w1,w2];
+  return g;
+}
+
+function locoFuxing(body=0xeceff5,stripe=0x2d66c9){
+  const g=new THREE.Group(); g._kind='fuxing';
+  const base=new THREE.Mesh(new THREE.BoxGeometry(LOCO_LEN,0.12,LOCO_WID+0.06),MAT.dark);
+  base.position.y=0.27; g.add(base);
+  const bodyM=new THREE.Mesh(new THREE.BoxGeometry(LOCO_LEN-0.24,0.6,LOCO_WID),mat(body));
+  bodyM.position.y=0.65; g.add(bodyM);
+  const nose=new THREE.Mesh(new THREE.ConeGeometry(0.37,0.75,10),mat(body));
+  nose.rotation.x=Math.PI/2; nose.position.set(0,0.62,-LOCO_LEN/2-0.2); g.add(nose);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(LOCO_LEN-0.36,0.1,LOCO_WID-0.04),mat(0xd7dde6));
+  roof.position.y=0.98; g.add(roof);
+  const stripeMesh=new THREE.Mesh(new THREE.BoxGeometry(LOCO_LEN-0.18,0.08,0.024),mat(stripe));
+  stripeMesh.position.set(0,0.69,LOCO_WID/2+0.012); g.add(stripeMesh);
+  const s2=stripeMesh.clone(); s2.position.z=-LOCO_WID/2-0.012; g.add(s2);
+  const win=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.17,0.03),MAT.glass);
+  win.position.set(0,0.78,-LOCO_LEN/2-0.52); g.add(win);
+  const b1=bogie(); b1.position.set(0,0,-LOCO_LEN*0.28); g.add(b1);
+  const b2=bogie(); b2.position.set(0,0, LOCO_LEN*0.28); g.add(b2);
+  g._bogies=[b1,b2];
+  return g;
+}
+
+function locoDiesel(body=0x4a6741){
+  const g=new THREE.Group(); g._kind='diesel';
+  const base=new THREE.Mesh(new THREE.BoxGeometry(LOCO_LEN,0.18,LOCO_WID+0.1),mat(0x2a2a2a));
+  base.position.y=0.24; g.add(base);
+  const cab=new THREE.Mesh(new THREE.BoxGeometry(LOCO_LEN*0.35,0.5,LOCO_WID-0.04),mat(body));
+  cab.position.set(-LOCO_LEN*0.3,0.72,0); g.add(cab);
+  const hood=new THREE.Mesh(new THREE.BoxGeometry(LOCO_LEN*0.55,0.38,LOCO_WID-0.08),mat(body));
+  hood.position.set(LOCO_LEN*0.08,0.6,0); g.add(hood);
+  const stack=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.05,0.28,6),mat(0x1a1a1a));
+  stack.position.set(LOCO_LEN*0.12,0.94,0); g.add(stack);
+  const winF=new THREE.Mesh(new THREE.BoxGeometry(0.03,0.2,0.3),MAT.glass);
+  winF.position.set(-LOCO_LEN*0.48,0.8,0); g.add(winF);
+  const b1=bogie(0x2a2a2a); b1.position.set(0,0,-LOCO_LEN*0.3); g.add(b1);
+  const b2=bogie(0x2a2a2a); b2.position.set(0,0, LOCO_LEN*0.3); g.add(b2);
+  g._bogies=[b1,b2];
+  return g;
+}
+
+function wagon(body=0xcc3322){
+  const g=new THREE.Group();
+  const base=new THREE.Mesh(new THREE.BoxGeometry(WAGON_LEN,0.1,WAGON_WID+0.04),MAT.dark);
+  base.position.y=0.24; g.add(base);
+  const bodyM=new THREE.Mesh(new THREE.BoxGeometry(WAGON_LEN-0.12,0.52,WAGON_WID),mat(body));
+  bodyM.position.y=0.6; g.add(bodyM);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(WAGON_LEN-0.2,0.08,WAGON_WID-0.02),mat(0xd0d4d8));
+  roof.position.y=0.88; g.add(roof);
+  for(const wx of [-WAGON_LEN*0.28,WAGON_LEN*0.28]){
+    const wp=wheelPair(); wp.position.set(0,0.11,wx); g.add(wp);
+  }
+  return g;
+}
+
+const SCHEMES = [
+  {loco:()=>locoFuxing(0xe8ebf2,0x2255bb), wColor:0x3a5fa0},
+  {loco:()=>locoFuxing(0xf5f0e0,0xcc4411), wColor:0xb83020},
+  {loco:()=>locoDiesel(0x4a6741), wColor:0x556644},
+  {loco:()=>locoDiesel(0x8a5a28), wColor:0x7a4a20},
+];
+
+// ════════════════════════════════════════════
+//  列车创建（新路网版本）
+// ════════════════════════════════════════════
+/*
+  列车位置由以下参数描述：
+  - segId: 当前所在路段 ID
+  - t: 路段内弧长参数 t∈[0,1]（从 A 端开始）
+  - dir: 1=A→B 方向，-1=B→A 方向
+  - 到达端点节点时，根据 dir 找到下一路段
+*/
+const _tmpA=new THREE.Vector3(), _tmpB=new THREE.Vector3();
+const _tmpM=new THREE.Vector3(), _tmpQ=new THREE.Quaternion();
+const _up=new THREE.Vector3(0,1,0);
+
+function createTrain(opts){
+  const {isPlayer=false, segId=0, t=0, dir=1, wagons=4, scheme=SCHEMES[0]} = opts;
+  const seg = SEGMENTS[segId];
+
+  const train={
+    isPlayer, segId, t, dir,
+    speed:opts.speed||0,
+    baseSpeed:opts.speed||0,
+    derailed:false,
+    roll:0, dv:new THREE.Vector3(), y:0,
+    wheelRot:0,
+    switchCool:0,
+    justCrashed:false,
+    smokeT:0,
+    hpLoco:100, hpWagon:100, hpWheel:100,
+    // 分叉选择：玩家按 A=左 D=右 预设下一路段
+    nextSegChoice: null,  // null=自动选
+    cars:[], couplers:[],
+  };
+
+  // 建模
+  const locoMesh = scheme.loco();
+  locoMesh.userData.isLoco = true;
+  scene.add(locoMesh);
+  train.cars.push({mesh:locoMesh, len:LOCO_LEN});
+
+  for(let i=0;i<wagons;i++){
+    const w=wagon(scheme.wColor);
+    scene.add(w);
+    train.cars.push({mesh:w, len:WAGON_LEN});
+  }
+
+  // 连接杆
+  for(let i=0;i<train.cars.length-1;i++){
+    const rod=new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.035,1,4),MAT.coupler);
+    scene.add(rod);
+    train.couplers.push(rod);
+  }
+
+  // 总长
+  train.totalLen = LOCO_LEN + wagons*(WAGON_LEN+COUPLE_GAP);
+
+  return train;
+}
+
+function disposeTrain(train){
+  for(const c of train.cars){ scene.remove(c.mesh); }
+  for(const r of train.couplers){ if(r) scene.remove(r); }
+}
+
+// ════════════════════════════════════════════
+//  列车位置采样（路段图版本）
+// ════════════════════════════════════════════
+/*
+  给定列车 train 和"从车头往后偏移 dist 米"，
+  计算该位置在路网中的 {pos, tan}。
+  
+  需要跨路段回溯：如果 dist 超过当前路段长度，
+  就沿着来的方向找上一条路段。
+*/
+function sampleTrainPos(train, distFromHead){
+  let segId = train.segId;
+  let t     = train.t;        // 车头的 t 参数
+  let dir   = train.dir;
+
+  // 当前路段内车头的弧长位置
+  const seg0 = SEGMENTS[segId];
+  let arcPos = t * seg0.totalLen;  // 车头在 A→B 方向的弧长位置
+  if(dir < 0) arcPos = seg0.totalLen - arcPos;  // B→A 方向则从末端算
+
+  // 向"后"走 distFromHead 米（逆行方向）
+  let remaining = distFromHead;
+  let curSegId = segId;
+  let curDir = dir;
+  let curArcPos = arcPos;  // 在 A→B 坐标系下的位置
+
+  while(remaining > 0){
+    const cSeg = SEGMENTS[curSegId];
+    // 在 A→B 坐标系下，向"后"（逆dir方向）的距离
+    if(curDir > 0){
+      // 行进方向 A→B，后方是弧长减小的方向
+      if(curArcPos >= remaining){
+        curArcPos -= remaining;
+        remaining = 0;
+      } else {
+        remaining -= curArcPos;
+        // 到达 A 端节点，找前一路段（不是来的那条）
+        const prevNode = NODES[cSeg.nA];
+        const exits = prevNode.segs.filter(e=>e.segId!==curSegId);
+        if(exits.length===0){ curArcPos=0; remaining=0; break; }
+        const e = exits[0];
+        curSegId = e.segId;
+        const nSeg = SEGMENTS[curSegId];
+        // 进入新路段的方向：e.dir是该路段连到prevNode的方向
+        // e.dir=1 → A端在 prevNode，进入时是 B→A 方向（dir=-1）
+        // e.dir=-1 → B端在 prevNode，进入时是 A→B 方向（dir=1）
+        curDir = -e.dir;
+        curArcPos = curDir>0 ? nSeg.totalLen : 0;
+      }
+    } else {
+      // 行进方向 B→A，后方是弧长增大的方向
+      const distToB = cSeg.totalLen - curArcPos;
+      if(distToB >= remaining){
+        curArcPos += remaining;
+        remaining = 0;
+      } else {
+        remaining -= distToB;
+        const prevNode = NODES[cSeg.nB];
+        const exits = prevNode.segs.filter(e=>e.segId!==curSegId);
+        if(exits.length===0){ curArcPos=cSeg.totalLen; remaining=0; break; }
+        const e = exits[0];
+        curSegId = e.segId;
+        const nSeg = SEGMENTS[curSegId];
+        curDir = -e.dir;
+        curArcPos = curDir>0 ? nSeg.totalLen : 0;
+      }
+    }
+  }
+
+  // 转为 t 参数
+  const finalSeg = SEGMENTS[curSegId];
+  let finalT;
+  if(curDir > 0){
+    finalT = curArcPos / finalSeg.totalLen;
+  } else {
+    finalT = 1 - curArcPos / finalSeg.totalLen;
+  }
+  finalT = clamp(finalT, 0, 1);
+
+  return sampleSeg(finalSeg, finalT, curDir);
+}
+
+// ════════════════════════════════════════════
+//  列车运动（路段图版本）
+// ════════════════════════════════════════════
+function advanceTrain(train, dt){
+  if(train.derailed) return;
+  const seg = SEGMENTS[train.segId];
+
+  // t 的变化量（弧长/段总长）
+  const ds = train.speed * dt / seg.totalLen;
+  train.t += ds * train.dir;  // dir=1→t增大(A→B)，dir=-1→t减小(B→A)
+
+  // 检查是否到达端点
+  if(train.t >= 1){
+    // 到达 B 端节点
+    const nodeId = seg.nB;
+    const exits = NODES[nodeId].segs.filter(e=>e.segId!==train.segId);
+    if(exits.length===0){
+      // 无路可走：反向
+      train.dir = -1;
+      train.t = 1;
+    } else {
+      const overflow = (train.t - 1) * seg.totalLen;
+      // 选择下一路段
+      let chosen;
+      if(train.nextSegChoice !== null){
+        chosen = exits.find(e=>e.segId===train.nextSegChoice) || exits[0];
+        train.nextSegChoice = null;
+      } else {
+        chosen = exits[Math.floor(Math.random()*exits.length)];
+      }
+      train.segId = chosen.segId;
+      // chosen.dir=1 → 该路段的 A 端在 nodeId → 我们从 A 端出发 → dir=1
+      // chosen.dir=-1 → 该路段的 B 端在 nodeId → 我们从 B 端出发 → dir=-1
+      train.dir = chosen.dir;
+      const nSeg = SEGMENTS[train.segId];
+      if(train.dir>0){ train.t = overflow/nSeg.totalLen; }
+      else            { train.t = 1 - overflow/nSeg.totalLen; }
+      train.t = clamp(train.t,0,1);
+    }
+  } else if(train.t <= 0){
+    // 到达 A 端节点
+    const nodeId = seg.nA;
+    const exits = NODES[nodeId].segs.filter(e=>e.segId!==train.segId);
+    if(exits.length===0){
+      train.dir = 1;
+      train.t = 0;
+    } else {
+      const overflow = Math.abs(train.t) * seg.totalLen;
+      let chosen;
+      if(train.nextSegChoice !== null){
+        chosen = exits.find(e=>e.segId===train.nextSegChoice) || exits[0];
+        train.nextSegChoice = null;
+      } else {
+        chosen = exits[Math.floor(Math.random()*exits.length)];
+      }
+      train.segId = chosen.segId;
+      train.dir = -chosen.dir;  // A端出发时方向和 chosen.dir 相反
+      const nSeg = SEGMENTS[train.segId];
+      if(train.dir>0){ train.t = overflow/nSeg.totalLen; }
+      else            { train.t = 1 - overflow/nSeg.totalLen; }
+      train.t = clamp(train.t,0,1);
+    }
+  }
+}
+
+// ════════════════════════════════════════════
+//  更新列车变换矩阵
+// ════════════════════════════════════════════
+function updateTrainTransforms(train, dt){
+  train.wheelRot += Math.abs(train.speed)*dt*0.85;
+
+  // 脱轨物理
+  if(train.derailed){
+    train.dv.y -= 9.8*dt;
+    train.y = Math.max(0, train.y + train.dv.y*dt);
+    train.roll += (train.rollSpd||0)*dt;
+  }
+
+  let accDist = 0;
+  const carWorld = [];
+  for(let i=0;i<train.cars.length;i++){
+    const c = train.cars[i];
+    if(c.detached){
+      c.detachVel.y -= 9.8*dt;
+      c.mesh.position.x += c.detachVel.x*dt;
+      c.mesh.position.y = Math.max(0.3, c.mesh.position.y+c.detachVel.y*dt);
+      c.mesh.position.z += c.detachVel.z*dt;
+      c.mesh.rotation.y += c.detachRot*dt;
+      c.detachVel.x*=0.97; c.detachVel.z*=0.97;
+      if(c.mesh.position.y<=0.31){ c.detachVel.y*=-0.3; c.detachVel.x*=0.7; c.detachVel.z*=0.7; }
+      carWorld.push({front:c.mesh.position.clone(),back:c.mesh.position.clone()});
+      continue;
+    }
+    if(c.derailVel){
+      c.derailVel.y -= 9.8*dt;
+      c.mesh.position.x += c.derailVel.x*dt;
+      c.mesh.position.y = Math.max(0.4, c.mesh.position.y+c.derailVel.y*dt);
+      c.mesh.position.z += c.derailVel.z*dt;
+      c.mesh.rotation.y += c.derailRot*dt;
+      c.mesh.rotation.z = train.roll;
+      c.derailVel.x*=0.98; c.derailVel.z*=0.98;
+      if(c.mesh.position.y<=0.41){ c.derailVel.y*=-0.2; }
+      carWorld.push({front:c.mesh.position.clone(),back:c.mesh.position.clone()});
+      continue;
+    }
+
+    // 正常跟随轨道
+    const centerDist = accDist + c.len*0.5;
+    const sp = sampleTrainPos(train, centerDist);
+
+    c.mesh.position.set(sp.pos.x, 0.72 + train.y - i*0.02, sp.pos.z);
+    const yaw = Math.atan2(sp.tan.x, sp.tan.z);
+    // 车体长度在局部 X 轴，-PI/2 让 +X 对齐轨道切线
+    c.mesh.rotation.set(train.derailed?0.04*i:0, yaw-Math.PI/2, train.derailed?train.roll+i*0.04:0);
+
+    // 车轮旋转
+    if(c.mesh._bogies){
+      for(const b of c.mesh._bogies){
+        if(b._wheelPairs) for(const wp of b._wheelPairs) wp.rotation.x=train.wheelRot;
+      }
+    }
+
+    const frontW = _tmpA.set(c.len*0.5-0.03,0,0).clone();
+    const backW  = _tmpB.set(-c.len*0.5+0.03,0,0).clone();
+    carWorld.push({front:c.mesh.localToWorld(frontW), back:c.mesh.localToWorld(backW)});
+    accDist += c.len + COUPLE_GAP;
+  }
+
+  // 更新连接杆
+  for(let i=0;i<train.couplers.length;i++){
+    const rod=train.couplers[i]; if(!rod) continue;
+    if(i+1>=carWorld.length) continue;
+    const a=carWorld[i].back, b=carWorld[i+1].front;
+    const dir2=_tmpM.copy(b).sub(a);
+    const len2=Math.max(0.05,dir2.length());
+    rod.position.copy(a.clone().add(b).multiplyScalar(0.5));
+    _tmpQ.setFromUnitVectors(_up,dir2.normalize());
+    rod.quaternion.copy(_tmpQ);
+    rod.scale.set(1,len2,1);
+  }
+
+  // 烟雾
+  train.smokeT+=dt;
+  if(train.smokeT>(train.isPlayer?0.55:1.0) && Math.abs(train.speed)>4){
+    train.smokeT=0;
+    if(train.cars[0]) emitSpark(train.cars[0].mesh.position.x,2.0,train.cars[0].mesh.position.z,false);
+  }
+}
+
+// ════════════════════════════════════════════
+//  粒子
+// ════════════════════════════════════════════
+const particles=[];
+const P_MAX=40;
+function emitSpark(x,y,z,big){
+  const n=big?12:4;
+  for(let i=0;i<n;i++){
+    if(particles.length>=P_MAX) break;
+    const m=new THREE.Mesh(new THREE.SphereGeometry(big?0.16:0.1,3,2),MAT.spark.clone());
+    m.position.set(x+rnd(-0.8,0.8),y+rnd(0,0.8),z+rnd(-0.8,0.8));
+    scene.add(m);
+    const a=rnd(0,TAU),s=rnd(0.1,big?2.2:1.0);
+    particles.push({mesh:m,vx:Math.cos(a)*s,vy:rnd(0.2,big?1.4:0.8),vz:Math.sin(a)*s,life:1,dec:big?0.045:0.08});
+  }
+}
+function updateParticles(){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.mesh.position.x+=p.vx; p.mesh.position.y+=p.vy; p.mesh.position.z+=p.vz;
+    p.vy-=0.06; p.life-=p.dec;
+    if(p.mesh.material) p.mesh.material.opacity=Math.max(0,p.life);
+    if(p.life<=0){ scene.remove(p.mesh); particles.splice(i,1); }
+  }
+}
+
+// ════════════════════════════════════════════
+//  音效
+// ════════════════════════════════════════════
+let AC=null;
+function ac(){ return AC||(AC=new(window.AudioContext||window.webkitAudioContext)()); }
+function blip(freq=120,d=0.12,vol=0.05){
+  try{
+    const a=ac(),o=a.createOscillator(),g=a.createGain();
+    o.type='sawtooth'; o.frequency.value=freq;
+    g.gain.value=vol; g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+d);
+    o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+d);
+  }catch(e){}
+}
+
+// ════════════════════════════════════════════
+//  创建列车群
+// ════════════════════════════════════════════
+const trains=[];
+let crashCount=0;
+
+// 玩家列车：在主干线第2段（A1→A2），从 A 端出发，方向 A→B
+const playerTrain = createTrain({
+  isPlayer:true,
+  segId:1,       // nA1→nA2 段
+  t:0.1,
+  dir:1,
+  speed:0,
+  wagons:5,
+  scheme:SCHEMES[0],
+});
+trains.push(playerTrain);
+
+// NPC列车：分布在各条路段上
+const npcSegs=[0,2,3,4,7,10,12,14,16];
+for(let i=0;i<npcSegs.length;i++){
+  const si=npcSegs[i];
+  if(si>=SEGMENTS.length) continue;
+  const t=createTrain({
+    segId:si,
+    t:0.2+i*0.08,
+    dir:i%2===0?1:-1,
+    speed:rnd(8,20),
+    wagons:Math.floor(rnd(3,7)),
+    scheme:pick(SCHEMES),
+  });
+  trains.push(t);
+}
+
+function spawnOpposite(){
+  if(trains.length>18) return;
+  const t=createTrain({
+    segId:playerTrain.segId,
+    t:playerTrain.t>0.5?playerTrain.t-0.4:playerTrain.t+0.4,
+    dir:-playerTrain.dir,
+    speed:rnd(14,26),
+    wagons:Math.floor(rnd(4,8)),
+    scheme:pick(SCHEMES),
+  });
+  trains.push(t);
+}
+
+// ════════════════════════════════════════════
+//  碰撞
+// ════════════════════════════════════════════
+const flash=document.getElementById('flash');
+function hitFlash(level){
+  flash.style.background=level===3?'rgba(255,20,0,.88)':level===2?'rgba(255,120,0,.65)':'rgba(255,230,0,.45)';
+  flash.style.opacity='1';
+  setTimeout(()=>flash.style.opacity='0',level===3?180:100);
+}
+let shakeT=0,shakeI=0;
+
+function checkCrash(){
+  for(let i=0;i<trains.length;i++){
+    const t1=trains[i];
+    if(t1.derailed||t1.justCrashed||!t1.cars[0]) continue;
+    for(let j=i+1;j<trains.length;j++){
+      const t2=trains[j];
+      if(t2.derailed||t2.justCrashed||!t2.cars[0]) continue;
+      // 只检同路段
+      if(t1.segId!==t2.segId) continue;
+      // 世界坐标距离
+      const p1=t1.cars[0].mesh.position, p2=t2.cars[0].mesh.position;
+      const dx=p1.x-p2.x, dz=p1.z-p2.z;
+      const dist=Math.sqrt(dx*dx+dz*dz);
+      if(dist>5.0) continue;
+
+      // 碰撞触发
+      t1.justCrashed=true; t2.justCrashed=true;
+      setTimeout(()=>{t1.justCrashed=false;},1500);
+      setTimeout(()=>{t2.justCrashed=false;},1500);
+
+      const relSpeed=Math.abs(t1.speed*t1.dir-t2.speed*t2.dir);
+      const level=relSpeed<8?1:relSpeed<20?2:3;
+
+      const cx=(p1.x+p2.x)*0.5,cz=(p1.z+p2.z)*0.5;
+      emitSpark(cx,1.5,cz,level>=2);
+      blip(level===3?55:85,0.22,level===3?0.13:0.08);
+
+      if(t1.isPlayer||t2.isPlayer){
+        crashCount++;
+        document.getElementById('sCrash').textContent=crashCount;
+        hitFlash(level);
+        shakeI=level*0.5; shakeT=level*0.18;
+      }
+
+      const m1=t1.cars.length,m2=t2.cars.length;
+      const v1=t1.speed*t1.dir,v2=t2.speed*t2.dir;
+      const e=0.55;
+      const v1n=(m1*v1+m2*v2-e*m2*(v1-v2))/(m1+m2);
+      const v2n=(m1*v1+m2*v2+e*m1*(v1-v2))/(m1+m2);
+      const damp=level===3?0.28:level===2?0.48:0.68;
+      t1.speed=Math.abs(v1n)*damp; t1.dir=v1n>=0?1:-1;
+      t2.speed=Math.abs(v2n)*damp; t2.dir=v2n>=0?1:-1;
+
+      // 推开（沿 t 推开）
+      const pushT=5.0/SEGMENTS[t1.segId].totalLen+0.01;
+      if(t1.t>t2.t){ t1.t=clamp(t1.t+pushT,0,1); t2.t=clamp(t2.t-pushT,0,1); }
+      else          { t1.t=clamp(t1.t-pushT,0,1); t2.t=clamp(t2.t+pushT,0,1); }
+
+      if(level===1){
+        if(t1.isPlayer){t1.hpLoco=clamp(t1.hpLoco-6,0,100);updateDamage();}
+        if(t2.isPlayer){t2.hpLoco=clamp(t2.hpLoco-6,0,100);updateDamage();}
+      }else if(level===2){
+        if(t1.isPlayer){t1.hpLoco=clamp(t1.hpLoco-20,0,100);t1.hpWagon=clamp(t1.hpWagon-15,0,100);updateDamage();}
+        if(t2.isPlayer){t2.hpLoco=clamp(t2.hpLoco-20,0,100);t2.hpWagon=clamp(t2.hpWagon-15,0,100);updateDamage();}
+      }else{
+        triggerDerail(t1); triggerDerail(t2);
+        if(t1.isPlayer){t1.hpLoco=0;t1.hpWagon=clamp(t1.hpWagon-50,0,100);t1.hpWheel=clamp(t1.hpWheel-40,0,100);updateDamage();}
+        if(t2.isPlayer){t2.hpLoco=0;t2.hpWagon=clamp(t2.hpWagon-50,0,100);t2.hpWheel=clamp(t2.hpWheel-40,0,100);updateDamage();}
+      }
+    }
+  }
+}
+
+function triggerDerail(train){
+  train.derailed=true;
+  train.dv.set(rnd(-6,6),rnd(4,9),rnd(-6,6));
+  train.rollSpd=rnd(-3.5,3.5);
+  if(train.cars[0]) emitSpark(train.cars[0].mesh.position.x,2,train.cars[0].mesh.position.z,true);
+  train.cars.forEach((car,i)=>{
+    if(!car.derailVel){
+      car.derailVel=new THREE.Vector3(rnd(-3,3),rnd(2,5),rnd(-3,3));
+      car.derailRot=rnd(-2,2);
+    }
+  });
+}
+
+function detachWagons(train,fromIndex){
+  if(fromIndex<=0||fromIndex>=train.cars.length) return;
+  for(let i=fromIndex;i<train.cars.length;i++){
+    const car=train.cars[i];
+    if(!car.detached){
+      car.detached=true;
+      car.detachVel=new THREE.Vector3(rnd(-4,4),rnd(1,3),rnd(-4,4));
+      car.detachRot=rnd(-1.5,1.5);
+      emitSpark(car.mesh.position.x,0.5,car.mesh.position.z,false);
+    }
+  }
+  for(let i=fromIndex;i<train.couplers.length;i++){
+    if(train.couplers[i]){ scene.remove(train.couplers[i]); train.couplers[i]=null; }
+  }
+}
+
+// ════════════════════════════════════════════
+//  输入 + 玩家控制
+// ════════════════════════════════════════════
+const keys={};
+window.addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='KeyV') cycleCam();
+  if(e.code==='KeyF') spawnOpposite();
+});
+window.addEventListener('keyup',e=>keys[e.code]=false);
+
+const MAX_SPEED=56;
+const ACC=4.2;
+const BRK=7.6;
+const EBRK=18;
+const FRI=0.012;
+
+function updatePlayer(dt){
+  const t=playerTrain;
+  if(t.derailed) return;
+
+  const W=keys['ArrowUp']||keys['KeyW'];
+  const S=keys['ArrowDown']||keys['KeyS'];
+  const A=keys['ArrowLeft']||keys['KeyA'];
+  const D=keys['ArrowRight']||keys['KeyD'];
+  const SP=keys['Space'];
+
+  // W=加速（按行进方向），S=减速/反向
+  let a=0;
+  if(W) a=ACC;
+  else if(S) a=t.speed>0?-BRK:-ACC*0.4;
+  if(SP) a=-EBRK;
+
+  t.speed=clamp(t.speed+a*dt,-6,MAX_SPEED);
+  if(!W&&!S&&!SP) t.speed*=(1-FRI*60*dt);
+  if(Math.abs(t.speed)<0.05) t.speed=0;
+
+  // A/D 预选下一路段分叉
+  t.switchCool=(t.switchCool||0)-dt;
+  if(t.switchCool<=0 && (A||D)){
+    // 查看下一个节点的分叉
+    const seg=SEGMENTS[t.segId];
+    const nextNodeId = t.dir>0 ? seg.nB : seg.nA;
+    const exits=NODES[nextNodeId].segs.filter(e=>e.segId!==t.segId);
+    if(exits.length>1){
+      // 按 A 选第一条，D 选第二条
+      t.nextSegChoice = A ? exits[0].segId : exits[exits.length-1].segId;
+      t.switchCool=0.4;
+    }
+  }
+
+  document.getElementById('speedNum').textContent=Math.round(Math.abs(t.speed*3.6));
+  updateJunctionHud();
+}
+
+// NPC 运动
+function updateNPCMotion(train,dt){
+  if(train.isPlayer||train.derailed) return;
+  if(!train.baseSpeed) train.baseSpeed=train.speed;
+  train.speed=clamp(train.baseSpeed+Math.sin(Date.now()*0.0003+train.segId)*2,4,30);
+}
+
+// ════════════════════════════════════════════
+//  HUD
+// ════════════════════════════════════════════
+function updateBar(id,v){
+  const el=document.getElementById(id);
+  el.style.width=v+'%';
+  el.style.background=v>60?'#00ff88':v>30?'#ffcc00':'#ff4444';
+}
+function updateDamage(){
+  updateBar('dLoco',playerTrain.hpLoco);
+  updateBar('dWagon',playerTrain.hpWagon);
+  updateBar('dWheel',playerTrain.hpWheel);
+}
+function updateJunctionHud(){
+  const t=playerTrain;
+  const seg=SEGMENTS[t.segId];
+  const nextNodeId=t.dir>0?seg.nB:seg.nA;
+  const exits=NODES[nextNodeId].segs.filter(e=>e.segId!==t.segId);
+  const arrow=document.getElementById('junctionArrow');
+  const name=document.getElementById('junctionName');
+  if(exits.length===0){
+    arrow.textContent='终点'; name.textContent='无出口';
+    arrow.style.color='#ff4444';
+  }else if(exits.length===1){
+    arrow.textContent='直行 →'; name.textContent='单线';
+    arrow.style.color='#34f5d0';
+  }else{
+    const chosen=t.nextSegChoice;
+    arrow.textContent=chosen!==null?`已选段${chosen}`:`分叉 [A/D选择]`;
+    name.textContent=`${exits.length}条出路`;
+    arrow.style.color=chosen!==null?'#ffd54a':'#ff8800';
+  }
+}
+
+// ════════════════════════════════════════════
+//  相机
+// ════════════════════════════════════════════
+const CAM_NAMES=['第三人称','驾驶室','侧视角'];
+let cam=0;
+function cycleCam(){
+  cam=(cam+1)%3;
+  document.getElementById('sView').textContent=CAM_NAMES[cam];
+}
+const _cp=new THREE.Vector3(), _ct=new THREE.Vector3();
+function updateCamera(dt){
+  const h=playerTrain.cars[0].mesh;
+  const pos=h.position;
+  // modelYaw = yaw - PI/2，所以真实 heading = modelYaw + PI/2
+  const heading=h.rotation.y + Math.PI/2;
+  const sx=Math.sin(heading), sz=Math.cos(heading);
+
+  // 修复：相机在火车"后方"（-heading方向），看向"前方"（+heading方向）
+  // 这样按↑时火车向前（远离相机）而不是朝相机靠近
+  if(cam===0){
+    // 相机在车尾后方+上方
+    _cp.set(pos.x-sx*18, pos.y+7.5, pos.z-sz*18);
+    camera.position.lerp(_cp,Math.min(1,dt*7));
+    // 看向车头前方
+    _ct.set(pos.x+sx*8, pos.y+1.5, pos.z+sz*8);
+    camera.lookAt(_ct);
+  }else if(cam===1){
+    // 驾驶室视角：在车头内部，看向前方
+    camera.position.set(pos.x+sx*1.2, pos.y+1.6, pos.z+sz*1.2);
+    _ct.set(pos.x+sx*30, pos.y+1.4, pos.z+sz*30);
+    camera.lookAt(_ct);
+  }else{
+    // 侧视角
+    _cp.set(pos.x-sz*14, pos.y+5.0, pos.z+sx*14);
+    camera.position.lerp(_cp,Math.min(1,dt*5));
+    _ct.copy(pos).add(new THREE.Vector3(0,1.2,0));
+    camera.lookAt(_ct);
+  }
+}
+
+// ════════════════════════════════════════════
+//  按钮
+// ════════════════════════════════════════════
+document.getElementById('btnView').onclick=cycleCam;
+document.getElementById('btnSpawn').onclick=spawnOpposite;
+document.getElementById('btnReset').onclick=()=>{
+  while(trains.length){ disposeTrain(trains.pop()); }
+  crashCount=0;
+  document.getElementById('sCrash').textContent='0';
+  const p=createTrain({isPlayer:true,segId:1,t:0.1,dir:1,speed:0,wagons:5,scheme:SCHEMES[0]});
+  trains.push(p);
+  Object.assign(playerTrain,p);
+  for(let i=0;i<npcSegs.length;i++){
+    const si=npcSegs[i]; if(si>=SEGMENTS.length) continue;
+    trains.push(createTrain({segId:si,t:0.2+i*0.08,dir:i%2===0?1:-1,speed:rnd(8,20),wagons:Math.floor(rnd(3,7)),scheme:pick(SCHEMES)}));
+  }
+  updateDamage();
+};
+
+// ════════════════════════════════════════════
+//  主循环
+// ════════════════════════════════════════════
+const clock=new THREE.Clock();
+let engT=0;
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+
+  updatePlayer(dt);
+  for(let i=0;i<trains.length;i++){
+    const t=trains[i];
+    if(!t.isPlayer) updateNPCMotion(t,dt);
+    advanceTrain(t,dt);
+    updateTrainTransforms(t,dt);
+  }
+
+  engT+=dt;
+  if(engT>0.13&&Math.abs(playerTrain.speed)>1){ engT=0; blip(28+Math.abs(playerTrain.speed)*1.1,0.08,0.02); }
+
+  checkCrash();
+  updateParticles();
+  updateCamera(dt);
+
+  if(shakeT>0){
+    shakeT-=dt;
+    camera.position.x+=rnd(-shakeI,shakeI);
+    camera.position.y+=rnd(-shakeI*0.25,shakeI*0.25);
+  }
+
+  ground.position.x=playerTrain.cars[0].mesh.position.x;
+  ground.position.z=playerTrain.cars[0].mesh.position.z;
+
+  document.getElementById('sTrain').textContent=trains.length;
+  renderer.render(scene,camera);
+}
+
+updateDamage();
+updateJunctionHud();
+animate();
+</script>
+</body>
+</html>
